@@ -21,20 +21,26 @@ status: published
 > - 定番 5 パターンとマルチエージェントの使いどころ
 > - 本番で必要になる安全策と評価の考え方
 
-この記事の内容は、特定の AI サービスに依存しない。OpenAI・Google・Anthropic などの API でも、手元で動かすオープンなモデルでも、同じ考え方がそのまま使える。
+この記事の内容は、特定の AI サービスに依存しない。OpenAI・Google・Anthropic などが提供する API（プログラムから AI を呼び出すための窓口）でも、手元で動かすオープンなモデルでも、同じ考え方がそのまま使える。
 
 ## コードの読み方
 
-コードはすべて Python で書き、**プログラミングをしない人でも流れを追えるように、ほぼ全行に日本語の説明を付けた**。読むときは次の 4 つだけ知っていれば十分だ。
+コードはすべて Python で書き、**プログラミングをしない人でも流れを追えるように、ほぼ全行に日本語の説明を付けた**。特に大事な行には `★` を付けてある。読むときは次の表だけ知っていれば十分だ。
 
 | 書き方 | 意味 |
 |---|---|
 | `# 〜` | 説明文（コメント）。プログラムとしては無視される |
-| `def 名前(...):` | 「関数」の定義。決まった手順に名前を付けて、何度も呼び出せるようにしたもの |
+| `def 名前(引数):` | 「関数」の定義。決まった手順に名前を付けて、何度も呼び出せるようにしたもの。**引数**はその手順に渡す材料 |
+| `return 値` | 関数の結果として、その値を返して終わる |
+| `if 条件:` | 条件に合うときだけ、下の字下げされた行を実行する |
+| `for x in 並び:` | 並びの中身を 1 つずつ `x` に入れて、下の字下げされた行を繰り返す（ループ） |
 | `[a, b, c]` | リスト。順番のある入れ物 |
 | `{"名前": 値}` | 辞書。名前と値の組を入れる入れ物 |
+| `import 〜` / `from 〜 import 〜` | 別のファイルや道具箱から部品を読み込む |
 
 行の頭の字下げ（空白）は「この中に含まれる」という意味を持つ。`if` や `for` の下で一段下がった行は、その条件や繰り返しの中で実行される。
+
+コード中の `"..."` で囲まれた部分は文字列（ただの文章）だ。`f"...{名前}..."` のように先頭に `f` が付いたものは、`{}` の中に変数の値が埋め込まれる。
 
 ## 全体マップ：この記事の読み方
 
@@ -121,18 +127,18 @@ from dataclasses import dataclass, field  # 「データの入れ物」を簡単
 
 
 # LLM が「このツールを使いたい」と頼んできた内容を入れる箱
-@dataclass
+@dataclass  # この 1 行で、下に並べた項目を持つ「箱の設計図」になる
 class ToolCall:
     id: str    # 頼みごとの番号。結果を返すときに「どの頼みへの答えか」を示すのに使う
     name: str  # 使いたいツールの名前（例: "search_notes"）
-    args: dict # ツールに渡す引数（例: {"query": "キャッシュ"}）
+    args: dict # ツールに渡す引数（例: {"query": "キャッシュ"}）。str は文字列、dict は辞書の意味
 
 
 # LLM からの返事を入れる箱
 @dataclass
 class Reply:
-    text: str = ""                                              # LLM が書いた文章
-    tool_calls: list[ToolCall] = field(default_factory=list)    # ツールの使用依頼（無ければ空のリスト）
+    text: str = ""                                              # LLM が書いた文章（無ければ空）
+    tool_calls: list[ToolCall] = field(default_factory=list)    # ★ ツールの使用依頼。空ならもう頼みごとは無い
 
 
 def call_llm(messages: list[dict], tools: list[dict]) -> Reply:
@@ -154,7 +160,8 @@ from llm import Reply, ToolCall  # さっき作った「返事の箱」を読み
 
 
 def fake_llm(messages: list[dict], tools: list[dict]) -> Reply:
-    last = messages[-1]  # 会話の最後の発言を見る
+    """本物の LLM の代わりに、会話の流れに合わせて決まった返事をする。"""
+    last = messages[-1]  # 会話の最後の発言を見る（[-1] は「最後の 1 つ」の意味）
 
     # 最後がユーザーの質問なら、「まずメモを検索したい」と頼む
     if last["role"] == "user":
@@ -164,35 +171,36 @@ def fake_llm(messages: list[dict], tools: list[dict]) -> Reply:
     if last["role"] == "tool" and last["tool_call_id"] == "c1":
         return Reply(tool_calls=[ToolCall(id="c2", name="read_note", args={"note_id": "n2"})])
 
-    # メモを読み終えたら、その内容をもとに答える（ツールはもう頼まない）
+    # ★ メモを読み終えたら、ツールを頼まずに文章で答える（これでループが終わる）
     return Reply(text="メモによると: " + last["content"])
 ```
+
+本物の LLM は、渡された会話を読んで「次は何をすべきか」を自分で考える。この偽物は、その判断を「質問が来たら検索、検索結果が来たら読む、読んだら答える」という決め打ちで真似しているだけだ。それでも、**返事の形が本物と同じ**なので、次に作るエージェント本体は本物と偽物のどちらとも組み合わせられる。
 
 ### エージェント本体
 
 例として、手元のメモを検索して質問に答える「ナレッジ検索エージェント」を作る。ツールは「メモを検索する」と「メモを読む」の 2 つだけにする。
 
-```python title="agent.py" caption="最小のエージェント。ツールの説明書・ツールの実行・ループの 3 部品でできている"
-import json                 # データを文字列に変換する道具
-from fake_llm import fake_llm  # 練習用の偽 LLM。本番では llm.py の call_llm に差し替える
+まず、エージェントが扱うデータと、LLM に渡す「ツールの説明書」を用意する。
 
-call_llm = fake_llm  # ★ この 1 行を変えるだけで、本物の LLM に切り替えられる
-
+```python title="notes_data.py" caption="調べる対象のメモと、LLM に渡すツールの説明書"
 # エージェントが調べる対象のメモ（本物のシステムならデータベースやファイル）
 NOTES = {
     "n1": "エージェントとは、結果を見ながらループでツールを使う LLM のこと。",
     "n2": "キャッシュは先頭一致。指示文の冒頭を 1 文字でも変えると、それ以降の再利用が効かなくなる。",
 }
 
-# LLM に渡す「ツールの説明書」。LLM はこれを読んで、どのツールをどう使うか決める
+# ★ LLM に渡す「ツールの説明書」。LLM はこれだけを読んで、どのツールをどう使うか決める
 TOOLS = [
     {
-        "name": "search_notes",
+        "name": "search_notes",  # ツールの名前
+        # 何をするツールで、何が返ってくるか。LLM が読むので具体的に書く
         "description": "メモをキーワードで検索し、見つかったメモの ID と冒頭 40 文字を返す。",
-        "parameters": {  # 引数の形（JSON Schema という共通の書式）
-            "type": "object",
-            "properties": {"query": {"type": "string", "description": "検索語。1〜3 語"}},
-            "required": ["query"],
+        # 引数の形。JSON Schema という、どのサービスでも共通の書き方で表す
+        "parameters": {
+            "type": "object",  # 引数はまとめて 1 つの入れ物（辞書）で渡す、という意味
+            "properties": {"query": {"type": "string", "description": "検索語。1〜3 語"}},  # 中身は文字列の検索語
+            "required": ["query"],  # 検索語は省略できない
         },
     },
     {
@@ -200,22 +208,35 @@ TOOLS = [
         "description": "ID を指定してメモの全文を読む。ID は search_notes の結果から得る。",
         "parameters": {
             "type": "object",
-            "properties": {"note_id": {"type": "string"}},
-            "required": ["note_id"],
+            "properties": {"note_id": {"type": "string"}},  # 中身は文字列のメモ ID
+            "required": ["note_id"],  # ID は省略できない
         },
     },
 ]
+```
+
+JSON（ジェイソン）は、データを文字で表すための広く使われている書き方で、上の辞書とほぼ同じ見た目をしている。
+
+次に、エージェント本体を書く。
+
+```python title="agent.py" caption="最小のエージェント。ツールの実行とループの 2 部品でできている"
+import json  # データを JSON の文字に変換する道具
+from fake_llm import fake_llm  # 練習用の偽 LLM。本番では llm.py の call_llm に差し替える
+from notes_data import NOTES, TOOLS  # さっき用意したメモとツールの説明書
+
+call_llm = fake_llm  # ★ この 1 行を変えるだけで、本物の LLM に切り替えられる
 
 
 def run_tool(name: str, args: dict) -> str:
     """LLM に頼まれたツールを、実際に実行して結果を文字で返す。"""
     if name == "search_notes":
-        # 検索語を含むメモを探し、ID と冒頭だけを返す（全文は返さない）
+        # 検索語を含むメモを探し、ID と冒頭 40 文字だけを返す（全文は返さない）
         hits = [{"id": k, "head": v[:40]} for k, v in NOTES.items() if args["query"] in v]
-        return json.dumps(hits, ensure_ascii=False)
+        return json.dumps(hits, ensure_ascii=False)  # LLM に渡せるよう文字に変換する
     if name == "read_note":
+        # ID に合うメモの全文を返す。無ければ「無い」と伝える
         return NOTES.get(args["note_id"], "その ID のメモはありません。")
-    return f"未知のツール: {name}"
+    return f"未知のツール: {name}"  # 説明書に無いツールを頼まれたとき
 
 
 def run_agent(task: str, max_turns: int = 10) -> str:
@@ -224,21 +245,22 @@ def run_agent(task: str, max_turns: int = 10) -> str:
 
     for _ in range(max_turns):  # ★ 最大 max_turns 回まで繰り返す（無限ループ防止）
         reply = call_llm(messages, TOOLS)  # LLM に履歴とツール一覧を渡して、次の一手を聞く
+        # LLM の返事も履歴に足す（次の回で LLM が自分の発言を読めるように）
         messages.append({"role": "assistant", "content": reply.text, "tool_calls": reply.tool_calls})
 
         if not reply.tool_calls:  # ★ ツールを頼まれなかったら、それが最終回答
             return reply.text
 
         for call in reply.tool_calls:  # 頼まれたツールを 1 つずつ実行する
-            result = run_tool(call.name, call.args)
-            # 結果を履歴に足す。どの頼みへの答えかを tool_call_id で示す
+            result = run_tool(call.name, call.args)  # ツールを実際に動かす
+            # ★ 結果を履歴に足す。どの頼みへの答えかを tool_call_id（頼みごとの番号）で示す
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
     return "上限の回数に達したので止めました。"  # ここに来たら答えが出なかったということ
 
 
 if __name__ == "__main__":  # このファイルを直接実行したときだけ動く部分
-    print(run_agent("キャッシュで気をつけることは？"))
+    print(run_agent("キャッシュで気をつけることは？"))  # 質問を投げて、答えを画面に表示する
 ```
 
 実行すると「メモによると: キャッシュは先頭一致。…」と表示される。コードの要点は 3 つある。
@@ -252,7 +274,7 @@ if __name__ == "__main__":  # このファイルを直接実行したときだ�
 > [!WARNING] ループには必ず上限を付ける
 > `max_turns` がないと、結果に満足できない LLM がツールを延々と呼び続けることがある。AI サービスは使った量だけ料金がかかるので、コストの上限としても回数の上限は最初から入れておく。
 
-LangGraph や各社のエージェント用 SDK などのフレームワークを使うと、このループを自分で書かずに済む。ただし中で起きていることは上の数十行と同じだ。**仕組みを理解するまでは手で書き、理解したらフレームワークに任せる**、という順番をおすすめする。
+フレームワーク（よく使う仕組みをまとめた土台）を使うと、このループを自分で書かずに済む。LangGraph や、各社が配っているエージェント用の SDK（開発用の部品セット）がその例だ。ただし中で起きていることは上の数十行と同じだ。**仕組みを理解するまでは手で書き、理解したらフレームワークに任せる**、という順番をおすすめする。
 
 ## ツール設計：エージェントの性能は道具で決まる
 
@@ -264,23 +286,26 @@ LangGraph や各社のエージェント用 SDK などのフレームワーク�
 
 ```python title="tools_bad.py" caption="悪い例。名前も説明も曖昧で、何を返すかも分からない"
 bad_tool = {
-    "name": "search",            # 何を検索するのか分からない
-    "description": "検索します",  # いつ使うのか、何が返るのかが書かれていない
+    "name": "search",            # ★ 何を検索するのか分からない
+    "description": "検索します",  # ★ いつ使うのか、何が返るのかが書かれていない
     "parameters": {
-        "type": "object",
+        "type": "object",  # 引数はまとめて 1 つの入れ物で渡す
         "properties": {
             "q": {"type": "string"},    # 「q」が何を表すのか分からない
             "opt": {"type": "string"},  # 何を入れればいいのか分からない
         },
+        # 必須の引数（required）も書かれていないので、何も渡さずに呼ばれうる
     },
 }
 ```
 
+LLM はこの説明書しか読めない。人間なら「たぶん問い合わせの検索だろう」と察するところでも、LLM は名前と説明文から推測するしかない。同じ内容を、読み手が迷わない形に書き直すと次のようになる。
+
 ```python title="tools_good.py" caption="良い例。いつ使うか・何を返すか・引数の制約までを説明に書く"
 good_tool = {
-    "name": "tickets_search",  # 「問い合わせ(tickets)の検索」と対象が名前で分かる
+    "name": "tickets_search",  # ★ 「問い合わせ(tickets)の検索」と対象が名前で分かる
     "description": (
-        # いつ使うか・何が返るか・隣のツールとの使い分けを、LLM が読む前提で書く
+        # ★ いつ使うか・何が返るか・隣のツールとの使い分けを、LLM が読む前提で書く
         "サポートの問い合わせを本文とタイトルで全文検索する。"
         "顧客の過去の問い合わせを調べるときに使う。個別の詳細は tickets_get で取る。"
         "結果は新しい順に最大 limit 件。各件は id・タイトル・状態・作成日だけを含む。"
@@ -289,7 +314,7 @@ good_tool = {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "検索語。例: 'ログインできない'"},
-            # 選べる値を 3 つに限定する。自由に書かせると "Open" や "未対応" のような揺れが出る
+            # ★ 選べる値を 3 つに限定する（enum）。自由に書かせると "Open" や "未対応" のような揺れが出る
             "status": {"type": "string", "enum": ["open", "closed", "all"]},
             # 件数に上限を付ける。大量の結果は LLM の注意を奪う
             "limit": {"type": "integer", "minimum": 1, "maximum": 20},
@@ -323,18 +348,18 @@ MAX_CHARS = 4000  # 1 回に返す文字数の上限。長すぎる結果は LLM
 
 
 def read_note_safely(note_id: str, notes: dict) -> str:
-    # 存在しない ID を指定されたら、エラーの理由と「次にやること」を伝える
+    # ★ 存在しない ID を指定されたら、エラーの理由と「次にやること」を文章で伝える
     if note_id not in notes:
         return (
-            f"メモ '{note_id}' はありません。"
-            "ID は search_notes の結果にある n で始まる文字列です。先に search_notes で検索してください。"
+            f"メモ '{note_id}' はありません。"  # 何が起きたか
+            "ID は search_notes の結果にある n で始まる文字列です。先に search_notes で検索してください。"  # 次にやること
         )
 
-    text = notes[note_id]
-    # 長すぎる場合は途中で切り、「続きがある」ことと続きの読み方を伝える
-    if len(text) > MAX_CHARS:
+    text = notes[note_id]  # メモの全文を取り出す
+    # ★ 長すぎる場合は途中で切り、「続きがある」ことと続きの読み方を伝える
+    if len(text) > MAX_CHARS:  # len() は文字数を数える
         return text[:MAX_CHARS] + "\n…（以下省略。offset を指定すると続きを読めます）"
-    return text
+    return text  # 短ければそのまま返す
 ```
 
 後半の切り詰めも重要だ。ツールの結果はすべて LLM に渡す文脈に積まれる。巨大な結果を返すツールは、次の章で扱う「文脈の予算」を一気に食いつぶす。**件数の上限・絞り込み・切り詰めに、ちょうどいい既定値を持たせる**のが、よいツールの条件になる。
@@ -403,14 +428,17 @@ def compact(messages: list[dict]) -> list[dict]:
     if total <= MAX_TOTAL_CHARS or len(messages) <= KEEP_RECENT + 1:
         return messages  # まだ短いので何もしない
 
+    # 履歴を 3 つに分ける: 最初の依頼 / 古いやり取り / 直近のやり取り
+    # （[1:-6] は「2 番目から、最後の 6 件の手前まで」、[-6:] は「最後の 6 件」という意味）
     first, old, recent = messages[0], messages[1:-KEEP_RECENT], messages[-KEEP_RECENT:]
-    # 古い部分を文章にまとめ、「決まったこと・分かったこと・残りの作業」を要約させる
+    # 古い部分を 1 つの文章につなげる
     old_text = "\n".join(f"{m['role']}: {m.get('content', '')}" for m in old)
+    # ★ LLM 自身に「決まったこと・分かったこと・残りの作業」の要約を書かせる
     summary = call_llm(
         [{"role": "user", "content": "次のやり取りを、決まったこと・分かったこと・残りの作業に分けて短く要約して。\n" + old_text}],
         tools=[],  # 要約にはツールは要らない
     ).text
-    # 最初の依頼 ＋ 要約 ＋ 直近のやり取り、の 3 つに置き換える
+    # ★ 最初の依頼 ＋ 要約 ＋ 直近のやり取り、の 3 つに置き換える（目的と手元の細部は残す）
     return [first, {"role": "user", "content": "（これまでの要約）\n" + summary}, *recent]
 ```
 
@@ -428,30 +456,33 @@ NOTES_FILE = Path("NOTES.md")  # メモを保存するファイル
 # LLM に渡すツールの説明書。「いつ使うか」まで書いておくと、適切な場面で使ってくれる
 NOTES_TOOLS = [
     {
-        "name": "notes_read",
+        "name": "notes_read",  # メモを読むツール
+        # ★ 「作業を再開するときに最初に使う」と書いておくと、LLM が再開時に自分から読む
         "description": "作業メモ全体を読む。作業を再開するときや、方針を思い出したいときに最初に使う。",
         "parameters": {"type": "object", "properties": {}},  # 引数なし
     },
     {
-        "name": "notes_append",
+        "name": "notes_append",  # メモに書き足すツール
+        # ★ 何を・どのくらいの量で・いつ書くかまで指定する（書きすぎるとメモ自体が長くなる）
         "description": "決定事項・分かったこと・残りの作業を 1〜3 行で追記する。区切りのよいところで使う。",
         "parameters": {
             "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
+            "properties": {"text": {"type": "string"}},  # 書き足す文章
+            "required": ["text"],  # 文章は省略できない
         },
     },
 ]
 
 
 def run_notes_tool(name: str, args: dict) -> str:
+    """LLM に頼まれたメモのツールを実行する。"""
     if name == "notes_read":
         # ファイルがあれば中身を返し、無ければ「まだ無い」と伝える
         return NOTES_FILE.read_text(encoding="utf-8") if NOTES_FILE.exists() else "（メモはまだありません）"
-    # notes_append のときは、ファイルの末尾に 1 行書き足す
+    # notes_append のときは、ファイルの末尾に 1 行書き足す（"a" は「追記モード」で開く意味）
     with NOTES_FILE.open("a", encoding="utf-8") as f:
-        f.write(f"- {args['text']}\n")
-    return "追記しました。"
+        f.write(f"- {args['text']}\n")  # 先頭に「- 」を付けて箇条書きにする
+    return "追記しました。"  # 書き足したことを LLM に伝える
 ```
 
 文脈は片付けられてしまう作業机、メモは引き出しだと考えると分かりやすい。机が片付けられても、引き出しを開ければ続きから始められる。
@@ -484,12 +515,14 @@ from llm import call_llm  # 共通の窓口
 
 def ask(prompt: str, system: str = "") -> str:
     """prompt（質問）を LLM に渡し、答えの文章を返す。system には役割の指示を入れられる。"""
-    messages = []
-    if system:
+    messages = []  # 空の会話から始める
+    if system:  # 役割の指示が渡されたときだけ
         messages.append({"role": "system", "content": system})  # 「あなたは〇〇担当です」のような役割
     messages.append({"role": "user", "content": prompt})         # 実際の質問
-    return call_llm(messages, tools=[]).text                     # ツールは使わず、文章だけ受け取る
+    return call_llm(messages, tools=[]).text  # ★ ツールは使わず、文章の答えだけ受け取る
 ```
+
+エージェントと違い、`ask` はループしない。1 回聞いて 1 回答えをもらうだけの部品だ。**ワークフローは、この「1 回きりの呼び出し」を開発者が決めた順番で組み合わせたもの**と言える。
 
 ### 1. プロンプトチェーン
 
@@ -508,6 +541,8 @@ def write_article(topic: str) -> str:
     return ask(f"誤字と冗長な表現だけを直して。\n{draft}")   # 3 段目: 校正する
 ```
 
+1 回で「記事を書いて」と頼むより、段階に分けた方が各段の仕事が単純になり、失敗しにくい。さらに段と段のあいだに**プログラムで確かめる関所**を挟めるので、おかしな途中結果が最後まで流れていくのを防げる。
+
 ### 2. ルーティング
 
 ```python title="route.py" caption="問い合わせの種類を判定して、担当を切り替える"
@@ -522,12 +557,14 @@ HANDLERS = {
 
 
 def route(question: str) -> str:
-    # まず種類だけを 1 語で答えさせる
+    # ★ まず種類だけを 1 語で答えさせる（.strip() は前後の余計な空白を取り除く）
     label = ask(f"次の問い合わせを refund / tech / other のどれか 1 語で分類して。\n{question}").strip()
-    # 想定外の答えが返ってきたら、安全側（総合窓口）に倒す
+    # ★ 想定外の答えが返ってきたら、安全側（総合窓口）に倒す
     system = HANDLERS.get(label, HANDLERS["other"])
     return ask(question, system=system)  # 選んだ担当者として答えさせる
 ```
+
+「分類する」と「答える」を分けるのがポイントだ。分類は 1 語で答えるだけの簡単な仕事なので、軽くて安いモデルに任せることもできる。LLM が想定外の答え（`"返金"` や `"Refund."` など）を返すこともあるので、**どれにも当てはまらないときの行き先を必ず決めておく**。
 
 ### 3. 並列化
 
@@ -539,13 +576,15 @@ VIEWPOINTS = ["セキュリティ", "性能", "読みやすさ"]  # レビュー
 
 
 def review(code: str) -> str:
-    # 3 つの観点のレビューを同時に依頼する（順番に待つより速い）
+    # ★ 3 つの観点のレビューを同時に依頼する（順番に待つより速い）
     with ThreadPoolExecutor() as pool:
+        # pool.map は「リストの中身それぞれに同じ手順を同時に当てはめる」道具
+        # lambda v: ... は「v を受け取って ... をする」使い捨ての小さな関数
         reviews = list(pool.map(lambda v: ask(f"{v}の観点だけでレビューして。\n{code}"), VIEWPOINTS))
 
-    # 観点ごとの結果を 1 つの文章にまとめ直す
+    # 観点ごとの結果を 1 つの文章にまとめ直す（zip は 2 つの並びを 1 組ずつ取り出す）
     joined = "\n\n".join(f"## {v}\n{r}" for v, r in zip(VIEWPOINTS, reviews))
-    return ask(f"次のレビューを重要度順に統合して。\n{joined}")
+    return ask(f"次のレビューを重要度順に統合して。\n{joined}")  # ★ 最後に 1 回で統合させる
 ```
 
 観点ごとに分けると、それぞれが 1 つの問いに集中できる。1 回で全部見させるより抜けが減る。
@@ -558,11 +597,11 @@ from ask import ask
 
 
 def solve(task: str) -> str:
-    # 司令塔: 仕事を独立した小さな作業に分けさせる（結果は ["作業1", "作業2"] の形で返させる）
+    # ★ 司令塔: どう分けるかを LLM 自身に決めさせる（結果は ["作業1", "作業2"] の形で返させる）
     plan = ask(f"次のタスクを独立した作業に分け、JSON の文字列配列だけを返して。\n{task}")
-    subtasks = json.loads(plan)
+    subtasks = json.loads(plan)  # 文字で返ってきたリストを、プログラムで扱えるリストに戻す
 
-    # 担当者: 分けた作業を 1 つずつ処理する（全体の目的も一緒に伝える）
+    # 担当者: 分けた作業を 1 つずつ処理する（★ 全体の目的も一緒に伝える。部分だけ見ると方向を誤る）
     results = [ask(f"全体の目的: {task}\n担当: {s}") for s in subtasks]
 
     # 司令塔: 各担当の結果を 1 つの答えにまとめる
@@ -582,12 +621,13 @@ def refine(task: str, max_rounds: int = 3) -> str:
 
     for _ in range(max_rounds):  # 最大 max_rounds 回まで直す
         # 採点役: 基準に沿って評価させる。合格なら PASS とだけ答えさせる
+        # ★ 採点基準を言葉で明示する。基準が曖昧だと採点がぶれて終わらない
         verdict = ask(
             "次の回答を採点基準（正確さ・具体性・簡潔さ）で評価し、"
             f"合格なら PASS とだけ、不合格なら直すべき点を箇条書きで返して。\n{draft}"
         )
         if verdict.strip() == "PASS":
-            break  # 合格したら終わり
+            break  # 合格したら繰り返しを抜ける（break は「ループを途中で終える」の意味）
 
         # 作る役: 指摘を受けて直させる
         draft = ask(f"指摘に沿って直して。\n指摘:\n{verdict}\n\n回答:\n{draft}")
@@ -634,16 +674,17 @@ from agent import run_agent  # 最初に作った最小のエージェントを�
 
 # 司令塔に渡すツールの説明書。「調べ物を任せる」ためのツール
 SUBAGENT_TOOL = {
-    "name": "delegate_research",
+    "name": "delegate_research",  # 「調べ物を任せる」ツール
     "description": "独立した調べ物を別のエージェントに任せ、結論の要約だけを受け取る。広く読む必要がある調査に使う。",
     "parameters": {
         "type": "object",
+        # ★ 任せるときに必ず伝える 3 つを、引数として司令塔に書かせる
         "properties": {
-            "objective": {"type": "string", "description": "何を明らかにしたいか"},
-            "output_format": {"type": "string", "description": "返してほしい形。例: 3 行の箇条書き"},
-            "boundaries": {"type": "string", "description": "調べなくてよい範囲"},
+            "objective": {"type": "string", "description": "何を明らかにしたいか"},  # 目的
+            "output_format": {"type": "string", "description": "返してほしい形。例: 3 行の箇条書き"},  # 返す形
+            "boundaries": {"type": "string", "description": "調べなくてよい範囲"},  # 範囲外
         },
-        "required": ["objective", "output_format"],
+        "required": ["objective", "output_format"],  # 目的と返す形は省略できない
     },
 }
 
@@ -653,10 +694,11 @@ def delegate_research(objective: str, output_format: str, boundaries: str = "") 
     brief = (
         f"目的: {objective}\n"
         f"出力形式: {output_format}\n"
-        f"範囲外: {boundaries or 'なし'}\n"
-        "2,000 字以内で結論だけ返すこと。"
+        f"範囲外: {boundaries or 'なし'}\n"  # 範囲外の指定が無ければ「なし」と書く
+        "2,000 字以内で結論だけ返すこと。"  # ★ 長さに上限を付け、司令塔の文脈を守る
     )
-    return run_agent(brief)  # 部下を動かし、最後の答え（要約）だけを司令塔に返す
+    # ★ 部下を動かし、最後の答え（要約）だけを司令塔に返す。部下が読んだ大量の資料は捨てられる
+    return run_agent(brief)
 ```
 
 依頼に「目的」「返す形」「範囲外」を必ず含めているのには理由がある。仕事の任せ方が失敗する主な原因は、指示の曖昧さだ。部下には**何のために・どんな形で・どこまで**を必ず渡す。
@@ -744,14 +786,14 @@ def run_tool_with_approval(name: str, args: dict, run_tool) -> str:
 ```python title="metrics.py" caption="試した結果から、2 つの指標を計算する"
 def pass_at_k(results: list[bool], k: int) -> float:
     """k 回試して、1 回でも成功する確率を見積もる。"""
-    p = sum(results) / len(results)  # 1 回あたりの成功率（True の数 ÷ 全体の数）
-    return 1 - (1 - p) ** k          # 「k 回すべて失敗する確率」を 1 から引く
+    p = sum(results) / len(results)  # 1 回あたりの成功率（成功 True の数 ÷ 全体の数）
+    return 1 - (1 - p) ** k          # ★ 「k 回すべて失敗する確率」を 1 から引く（** は「〜乗」）
 
 
 def pass_hat_k(results: list[bool], k: int) -> float:
     """k 回試して、すべて成功する確率を見積もる。"""
-    p = sum(results) / len(results)
-    return p ** k                    # 成功率を k 回かけ合わせる
+    p = sum(results) / len(results)  # 1 回あたりの成功率
+    return p ** k                    # ★ 成功率を k 回かけ合わせる（毎回成功し続ける確率）
 
 
 # 10 回試して 8 回成功した（成功率 80%）という結果

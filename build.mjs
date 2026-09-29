@@ -193,10 +193,61 @@ ${urls.map((u) => `  <url><loc>${xml(abs(u))}</loc></url>`).join("\n")}
 // GitHub Pages で Jekyll 処理を止める
 write(".nojekyll", "");
 
+/* ---------- PWA ---------- */
+
+write("offline.html", page({
+  depth: 0,
+  path: "offline.html",
+  base: new URL(site.url.replace(/\/?$/, "/")).pathname,
+  title: "オフラインです",
+  description: "ネットワークに接続されていません。",
+  body: P.offlinePage(),
+}));
+
+write("manifest.webmanifest", JSON.stringify({
+  name: site.title,
+  short_name: site.short,
+  description: site.description,
+  lang: site.lang,
+  start_url: "./",
+  scope: "./",
+  display: "standalone",
+  background_color: "#f5f6f2",
+  theme_color: "#f5f6f2",
+  categories: ["education", "productivity"],
+  icons: [
+    { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "icons/maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+    { src: "icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+}, null, 2));
+
 /* ---------- アセット ---------- */
 
 copyDir(path.join(ROOT, "public"), DIST);
 copyDir(path.join(ROOT, "src", "assets"), path.join(DIST, "assets"));
+
+// Service Worker はスコープをサイト全体にするためルート直下に置く。
+// 読む価値のあるファイルをすべて事前キャッシュし、オフラインでも全記事を読めるようにする
+const listFiles = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? listFiles(path.join(dir, e.name)) : [path.join(dir, e.name)]
+  );
+const precache = [
+  "./",
+  ...listFiles(DIST)
+    .map((f) => path.relative(DIST, f).split(path.sep).join("/"))
+    .filter((f) => /\.(html|css|js|svg|png|webmanifest)$/.test(f))
+    .filter((f) => !["404.html", "assets/sw.js"].includes(f))
+    .sort(),
+];
+const sw = fs
+  .readFileSync(path.join(ROOT, "src", "assets", "sw.js"), "utf8")
+  .replace(`"devkb-__VERSION__"`, `"devkb-${V}"`)
+  .replace("= __PRECACHE__;", `= ${JSON.stringify(precache)};`);
+write("sw.js", sw);
+fs.rmSync(path.join(DIST, "assets", "sw.js"), { force: true });
 
 /* ---------- 結果表示 ---------- */
 

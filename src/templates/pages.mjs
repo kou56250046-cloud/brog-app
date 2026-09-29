@@ -173,6 +173,14 @@ export function tagsPage(data) {
 </div>`;
 }
 
+export function offlinePage() {
+  return `<div class="wrap list-page">
+  <h1>オフラインです</h1>
+  <p class="list-desc">このページはまだ端末に保存されていません。一度開いたページと、インストール時に保存した記事はオフラインでも読めます。</p>
+  <p><a class="more" href="./index.html">記事一覧へ戻る</a></p>
+</div>`;
+}
+
 export function notFoundPage() {
   return `<div class="wrap list-page">
   <h1>ページが見つかりません</h1>

@@ -36,6 +36,10 @@ ${when(o.base, `<base href="${escapeHtml(o.base || "")}" />`)}
 <meta name="theme-color" content="#f5f6f2" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#14181f" media="(prefers-color-scheme: dark)" />
 <link rel="icon" href="${r("assets/favicon.svg")}" type="image/svg+xml" />
+<link rel="icon" href="${r("icons/icon-192.png")}" type="image/png" sizes="192x192" />
+<link rel="apple-touch-icon" href="${r("icons/apple-touch-icon.png")}" />
+<link rel="manifest" href="${r("manifest.webmanifest")}" />
+<meta name="apple-mobile-web-app-title" content="${escapeHtml(site.short)}" />
 <link rel="alternate" type="application/rss+xml" title="${escapeHtml(site.title)}" href="${r("feed.xml")}" />
 <link rel="stylesheet" href="${r("assets/style.css")}?v=${v}" />
 <script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>

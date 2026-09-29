@@ -17,6 +17,15 @@
     });
   }
 
+  /* ---------- PWA ---------- */
+
+  // file:// では Service Worker を使えないので http(s) のときだけ登録する
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register(document.body.dataset.root + "sw.js").catch(function () { /* 登録失敗は閲覧に影響しない */ });
+    });
+  }
+
   /* ---------- "/" で検索へ ---------- */
 
   document.addEventListener("keydown", function (e) {

@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 // 開発用の簡易サーバー（Node 標準ライブラリのみ）
 // content/ と src/ の変更を監視して自動で再ビルドする。
+// 公開先（GitHub Pages）と同じパス（site.config.mjs の url のパス部分）で配信し、
+// 404・オフラインページの <base> と Service Worker のスコープを本番と揃える。
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import site from "../site.config.mjs";
 
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
+const BASE = new URL(site.url.replace(/\/?$/, "/")).pathname; // 例: "/brog-app/"
 const PORT = Number(process.env.PORT) || 4323; // ~/projects/PORTS.md で割り当て済み
 
 const TYPES = {
@@ -34,7 +38,9 @@ function build(label) {
 }
 
 function resolve(urlPath) {
-  const clean = decodeURIComponent(urlPath.split("?")[0]);
+  const pathname = decodeURIComponent(urlPath.split("?")[0]);
+  if (!pathname.startsWith(BASE)) return null;
+  const clean = "/" + pathname.slice(BASE.length);
   const candidates = [clean, `${clean}.html`, path.posix.join(clean, "index.html")];
   if (clean === "/") candidates.unshift("/index.html");
   for (const c of candidates) {
@@ -48,6 +54,11 @@ build("init");
 
 http
   .createServer((req, res) => {
+    if (req.url === "/" || req.url === BASE.slice(0, -1)) {
+      res.writeHead(302, { location: BASE });
+      res.end();
+      return;
+    }
     const file = resolve(req.url || "/");
     if (!file) {
       const nf = path.join(DIST, "404.html");
@@ -61,7 +72,7 @@ http
     });
     res.end(fs.readFileSync(file));
   })
-  .listen(PORT, () => console.log(`\n  http://localhost:${PORT}  で確認できます（Ctrl+C で終了）\n`));
+  .listen(PORT, () => console.log(`\n  http://localhost:${PORT}${BASE}  で確認できます（Ctrl+C で終了）\n`));
 
 let timer = null;
 for (const dir of ["content", "src", "site.config.mjs"]) {

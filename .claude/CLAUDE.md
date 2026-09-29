@@ -23,7 +23,14 @@ CMS・コメント・アクセス解析は持たない。
 - 検索インデックスは `search-index.js`（`window.SEARCH_INDEX = …`）。`fetch` しない
 - 絶対 URL（`site.url`）を使うのは RSS・サイトマップ・OGP だけ
 
-### 3. 外部サービスを使わない
+### 3. PWA
+
+- `src/assets/sw.js` をビルドで `dist/sw.js` に書き出す。事前キャッシュの一覧とバージョンはビルドが埋める
+- HTML はネットワーク優先、アセットはキャッシュ優先。全ページを事前キャッシュしてオフラインで読めるようにする
+- 404・オフラインページは任意の階層で返るため `<base>` で公開パスに固定している。開発サーバーも同じパスで配信する
+- アイコンは `node scripts/make-icons.mjs` で `public/icons/` に生成する（手で PNG を描かない）
+
+### 4. 外部サービスを使わない
 
 DB・認証・解析・広告は使わない。公開は GitHub Pages のみ。
 
@@ -49,7 +56,8 @@ docs/writing-guide.md     記事の書き方（執筆前に必ず読む）
 
 ```bash
 node build.mjs            # dist/ を生成
-node scripts/serve.mjs    # http://localhost:4323 （変更を監視して再ビルド）
+node scripts/serve.mjs    # http://localhost:4323/brog-app/ （変更を監視して再ビルド）
+node scripts/make-icons.mjs  # アイコンを再生成
 ```
 
 ---

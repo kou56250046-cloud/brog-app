@@ -1,27 +1,40 @@
 ---
 title: AIエージェントは「賢さ」より「設計」で決まる——ツール・文脈・評価まで実装で理解する
-description: LLM にループとツールを渡すと何が起きるのか。最小 50 行のエージェントから、ツール設計・コンテキストエンジニアリング・5 つの定番パターン・マルチエージェント・MCP・本番運用まで、Python のコードと図で基礎から発展まで分解する。
+description: LLM にループとツールを渡すと何が起きるのか。特定のサービスに依存しない最小のエージェントから、ツール設計・文脈の管理・5 つの定番パターン・マルチエージェント・MCP・本番運用まで、コメント付きの Python と図で基礎から発展まで分解する。
 date: "2026-09-29"
 verified: "2026-09-29"
 category: AIエージェント
-tags: [AIエージェント, LLM, Claude API, Python, コンテキストエンジニアリング, MCP, 設計パターン]
+tags: [AIエージェント, LLM, Python, コンテキストエンジニアリング, MCP, 設計パターン]
 level: [basic, practice, advanced]
 status: published
 ---
 
-同じモデルを使っているのに、あるエージェントは仕事をやり遂げ、別のエージェントは同じ場所をぐるぐる回り続ける。差を生んでいるのはモデルの賢さではなく、**モデルの周りに何をどう組んだか**だ。
+同じ AI モデルを使っているのに、あるエージェントは仕事をやり遂げ、別のエージェントは同じ場所をぐるぐる回り続ける。差を生んでいるのはモデルの賢さではなく、**モデルの周りに何をどう組んだか**だ。
 
-この記事では、AIエージェントを「LLM を中心に置いたソフトウェア」として分解する。最小の実装から始めて、ツール・文脈・構成パターン・運用へと一段ずつ積み上げていく。
+この記事では、AIエージェントを「LLM（大規模言語モデル）を中心に置いたソフトウェア」として分解する。最小の実装から始めて、ツール・文脈・構成パターン・運用へと一段ずつ積み上げていく。
 
 > [!TIP] この記事で分かること
 > - エージェントとワークフローの違いと、どちらを選ぶべきかの判断基準
-> - エージェントの心臓部「ループ」を 50 行で実装する方法
+> - エージェントの心臓部「ループ」の仕組みと、最小の実装
 > - エージェントが使いやすいツールの設計（悪い例 → 良い例）
-> - 長く動かすための文脈の管理（キャッシュ・圧縮・外部メモ）
+> - 長く動かすための文脈の管理（圧縮・外部メモ・キャッシュ）
 > - 定番 5 パターンとマルチエージェントの使いどころ
 > - 本番で必要になる安全策と評価の考え方
 
-コードはすべて Python と Anthropic 公式 SDK（`pip install anthropic`）で書いている。モデルは執筆時点（2026 年 9 月）の Claude Opus 5.5（`claude-opus-5-5`）を使う。API キーは環境変数 `ANTHROPIC_API_KEY` から自動で読まれる。
+この記事の内容は、特定の AI サービスに依存しない。OpenAI・Google・Anthropic などの API でも、手元で動かすオープンなモデルでも、同じ考え方がそのまま使える。
+
+## コードの読み方
+
+コードはすべて Python で書き、**プログラミングをしない人でも流れを追えるように、ほぼ全行に日本語の説明を付けた**。読むときは次の 4 つだけ知っていれば十分だ。
+
+| 書き方 | 意味 |
+|---|---|
+| `# 〜` | 説明文（コメント）。プログラムとしては無視される |
+| `def 名前(...):` | 「関数」の定義。決まった手順に名前を付けて、何度も呼び出せるようにしたもの |
+| `[a, b, c]` | リスト。順番のある入れ物 |
+| `{"名前": 値}` | 辞書。名前と値の組を入れる入れ物 |
+
+行の頭の字下げ（空白）は「この中に含まれる」という意味を持つ。`if` や `for` の下で一段下がった行は、その条件や繰り返しの中で実行される。
 
 ## 全体マップ：この記事の読み方
 
@@ -38,26 +51,36 @@ F --> G[複数で分担する]
 G --> H([本番で運用する])
 ```
 
+## そもそもエージェントとは何か
+
+2023 年に OpenAI の研究者 Lilian Weng が書いた解説は、エージェントを次の式で表した。
+
+> エージェント ＝ LLM ＋ 計画 ＋ 記憶 ＋ ツールの使用
+
+LLM そのものは「文章を受け取って文章を返す」だけの部品だ。そこに、**仕事を小さく分ける力（計画）**、**覚えておく仕組み（記憶）**、**外の世界に働きかける手段（ツール）** を足したものがエージェントになる。
+
+この「考える → 行動する → 結果を見る」を繰り返す方式は、2022 年の論文 **ReAct**（Reasoning + Acting）で広く知られるようになった。考えるだけ、あるいは行動するだけよりも、交互に行う方が正確で、人間が途中経過を追いやすいことが示されている。
+
 ## ワークフローとエージェントは何が違うのか
 
-「AIエージェント」という言葉は広く使われすぎている。Anthropic は 2024 年 12 月の記事 "Building Effective Agents" で、LLM を使うシステムを 2 種類に分けた。
+「AIエージェント」という言葉は広く使われすぎている。設計の現場では、LLM を使うシステムを 2 種類に分けて考えることが多い。
 
-- **ワークフロー**：LLM とツールを、**開発者があらかじめ書いたコード経路**で動かすもの
-- **エージェント**：LLM が**自分で次の手順とツールを決めながら**、環境からのフィードバックを見てループするもの
+- **ワークフロー**：LLM とツールを、**開発者があらかじめ決めた手順どおり**に動かすもの
+- **エージェント**：LLM が**自分で次の手順と使う道具を決めながら**、結果を見て繰り返すもの
 
-違いは「誰が制御フローを持っているか」だ。
+違いは「次に何をするかを誰が決めるか」だ。
 
 | 観点 | ワークフロー | エージェント |
 |---|---|---|
-| 次に何をするか決めるのは | 開発者のコード | LLM |
+| 次に何をするか決めるのは | 開発者が書いた手順 | LLM |
 | ステップ数 | 事前に決まる | 実行するまで分からない |
-| 予測可能性・テストしやすさ | 高い | 低い |
-| コスト・レイテンシ | 小さく一定 | 大きく変動する |
-| 向いているタスク | 手順が決まっている分類・変換・定型処理 | 調査・デバッグ・コーディングなど手順が読めない問題 |
+| 予測しやすさ・テストしやすさ | 高い | 低い |
+| コスト・待ち時間 | 小さく一定 | 大きく変動する |
+| 向いている仕事 | 手順が決まっている分類・変換・定型処理 | 調査・デバッグ・コーディングなど手順が読めない問題 |
 
-同じ記事は、設計の原則として次の一文を挙げている。**「できるだけ単純な解から始め、必要なときだけ複雑にする」**。
+Anthropic・OpenAI の両社が公開している構築ガイドは、どちらも同じ趣旨の助言をしている。**できるだけ単純な仕組みから始め、必要になったときだけ複雑にする**。
 
-多くのタスクは、1 回の LLM 呼び出しかワークフローで足りる。エージェントを選ぶのは、手順を事前に書き下せないと分かってからでいい。
+多くの仕事は、1 回の LLM 呼び出しかワークフローで足りる。エージェントを選ぶのは、手順を事前に書き下せないと分かってからでいい。
 
 > [!NOTE] エージェントにする前に確かめる 4 つの問い
 > 1. **複雑さ**：手順を事前に書き下せないほど複雑か
@@ -67,7 +90,7 @@ G --> H([本番で運用する])
 >
 > どれか 1 つでも「いいえ」なら、ワークフローに留める。
 
-## 心臓部は「ループ」：50 行で作る最小エージェント
+## 心臓部は「ループ」：最小のエージェントを作る
 
 エージェントの正体は驚くほど単純だ。**ツールを使える LLM を、ツールを呼ばなくなるまでループで回す**。これだけで成り立つ。
 
@@ -79,25 +102,94 @@ D --> B
 C -- いいえ --> E([最終回答を返す])
 ```
 
+### どのサービスでも共通の「LLM の窓口」
+
+どの AI サービスにも、LLM に「使えるツールの一覧」を渡し、LLM が「このツールをこの引数で使いたい」と返してくる機能がある。呼び名はサービスによって違うが、仕組みは同じだ。
+
+| サービス | 機能の呼び名 | 「ツールを使いたい」の返し方 |
+|---|---|---|
+| OpenAI | Function calling / Tools | 応答に `tool_calls` が入る |
+| Google（Gemini） | Function calling | 応答に `functionCall` が入る |
+| Anthropic（Claude） | Tool use | 応答に `tool_use` ブロックが入る |
+
+日本語の技術記事でも「Function Calling」「Tool Calling」「ツール呼び出し」が混在しているが、指しているものは同じだ。
+
+そこでこの記事では、サービスの違いを 1 か所に閉じ込める。「LLM に会話とツール一覧を渡して、返事を受け取る」窓口の関数 `call_llm` を 1 つ決め、残りのコードはすべてこの窓口だけを使って書く。
+
+```python title="llm.py" caption="どのサービスでも共通の形で LLM を呼ぶための窓口"
+from dataclasses import dataclass, field  # 「データの入れ物」を簡単に作るための道具
+
+
+# LLM が「このツールを使いたい」と頼んできた内容を入れる箱
+@dataclass
+class ToolCall:
+    id: str    # 頼みごとの番号。結果を返すときに「どの頼みへの答えか」を示すのに使う
+    name: str  # 使いたいツールの名前（例: "search_notes"）
+    args: dict # ツールに渡す引数（例: {"query": "キャッシュ"}）
+
+
+# LLM からの返事を入れる箱
+@dataclass
+class Reply:
+    text: str = ""                                              # LLM が書いた文章
+    tool_calls: list[ToolCall] = field(default_factory=list)    # ツールの使用依頼（無ければ空のリスト）
+
+
+def call_llm(messages: list[dict], tools: list[dict]) -> Reply:
+    """会話の履歴(messages)と使えるツールの一覧(tools)を LLM に渡し、返事を受け取る。
+
+    ★ ここだけが、使う AI サービスによって書き方が変わる場所。
+    OpenAI・Google・Anthropic などの公式ライブラリを使って中身を書き、
+    返ってきた結果を上の Reply の形に詰め替えて返す。
+    """
+    raise NotImplementedError("使うサービスに合わせて中身を書く")  # まだ中身が無いことを示す
+```
+
+`call_llm` の中身は、サービスの公式ドキュメントにある「ツールを使う例」をほぼそのまま写して書ける。
+
+手元で動きを確かめられるように、本物の LLM の代わりに決まった返事をする**練習用の偽物**も用意しておく。API キーも通信も要らない。
+
+```python title="fake_llm.py" caption="練習用の偽 LLM。本物と同じ形で返事をするので、ループの動きを手元で確かめられる"
+from llm import Reply, ToolCall  # さっき作った「返事の箱」を読み込む
+
+
+def fake_llm(messages: list[dict], tools: list[dict]) -> Reply:
+    last = messages[-1]  # 会話の最後の発言を見る
+
+    # 最後がユーザーの質問なら、「まずメモを検索したい」と頼む
+    if last["role"] == "user":
+        return Reply(tool_calls=[ToolCall(id="c1", name="search_notes", args={"query": "キャッシュ"})])
+
+    # 最後が検索結果なら、「見つかったメモ n2 を読みたい」と頼む
+    if last["role"] == "tool" and last["tool_call_id"] == "c1":
+        return Reply(tool_calls=[ToolCall(id="c2", name="read_note", args={"note_id": "n2"})])
+
+    # メモを読み終えたら、その内容をもとに答える（ツールはもう頼まない）
+    return Reply(text="メモによると: " + last["content"])
+```
+
+### エージェント本体
+
 例として、手元のメモを検索して質問に答える「ナレッジ検索エージェント」を作る。ツールは「メモを検索する」と「メモを読む」の 2 つだけにする。
 
-```python title="agent.py" caption="最小のエージェント。ツール定義・ツール実行・ループの 3 部品でできている" {43,45,51-52}
-import json
-import anthropic
+```python title="agent.py" caption="最小のエージェント。ツールの説明書・ツールの実行・ループの 3 部品でできている"
+import json                 # データを文字列に変換する道具
+from fake_llm import fake_llm  # 練習用の偽 LLM。本番では llm.py の call_llm に差し替える
 
-client = anthropic.Anthropic()
-MODEL = "claude-opus-5-5"
+call_llm = fake_llm  # ★ この 1 行を変えるだけで、本物の LLM に切り替えられる
 
+# エージェントが調べる対象のメモ（本物のシステムならデータベースやファイル）
 NOTES = {
-    "n1": "エージェントとは、環境からのフィードバックを見ながらループでツールを使う LLM のこと。",
-    "n2": "プロンプトキャッシュは先頭一致。system の中身を 1 文字変えると以降のキャッシュが無効になる。",
+    "n1": "エージェントとは、結果を見ながらループでツールを使う LLM のこと。",
+    "n2": "キャッシュは先頭一致。指示文の冒頭を 1 文字でも変えると、それ以降の再利用が効かなくなる。",
 }
 
+# LLM に渡す「ツールの説明書」。LLM はこれを読んで、どのツールをどう使うか決める
 TOOLS = [
     {
         "name": "search_notes",
-        "description": "メモをキーワードで検索し、一致したメモの ID と冒頭 40 文字を返す。",
-        "input_schema": {
+        "description": "メモをキーワードで検索し、見つかったメモの ID と冒頭 40 文字を返す。",
+        "parameters": {  # 引数の形（JSON Schema という共通の書式）
             "type": "object",
             "properties": {"query": {"type": "string", "description": "検索語。1〜3 語"}},
             "required": ["query"],
@@ -106,7 +198,7 @@ TOOLS = [
     {
         "name": "read_note",
         "description": "ID を指定してメモの全文を読む。ID は search_notes の結果から得る。",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {"note_id": {"type": "string"}},
             "required": ["note_id"],
@@ -116,120 +208,95 @@ TOOLS = [
 
 
 def run_tool(name: str, args: dict) -> str:
+    """LLM に頼まれたツールを、実際に実行して結果を文字で返す。"""
     if name == "search_notes":
+        # 検索語を含むメモを探し、ID と冒頭だけを返す（全文は返さない）
         hits = [{"id": k, "head": v[:40]} for k, v in NOTES.items() if args["query"] in v]
         return json.dumps(hits, ensure_ascii=False)
     if name == "read_note":
-        return NOTES.get(args["note_id"], "そのIDのメモはありません。")
+        return NOTES.get(args["note_id"], "その ID のメモはありません。")
     return f"未知のツール: {name}"
 
 
 def run_agent(task: str, max_turns: int = 10) -> str:
-    messages = [{"role": "user", "content": task}]
-    for _ in range(max_turns):
-        response = client.messages.create(
-            model=MODEL, max_tokens=16000, tools=TOOLS, messages=messages
-        )
-        messages.append({"role": "assistant", "content": response.content})
+    """依頼(task)を受け取り、答えが出るまで LLM とツールを往復させる。"""
+    messages = [{"role": "user", "content": task}]  # 会話の履歴。最初はユーザーの依頼だけ
 
-        if response.stop_reason != "tool_use":
-            return "".join(b.text for b in response.content if b.type == "text")
+    for _ in range(max_turns):  # ★ 最大 max_turns 回まで繰り返す（無限ループ防止）
+        reply = call_llm(messages, TOOLS)  # LLM に履歴とツール一覧を渡して、次の一手を聞く
+        messages.append({"role": "assistant", "content": reply.text, "tool_calls": reply.tool_calls})
 
-        results = []
-        for block in response.content:
-            if block.type == "tool_use":
-                output = run_tool(block.name, block.input)
-                results.append({"type": "tool_result", "tool_use_id": block.id, "content": output})
-        messages.append({"role": "user", "content": results})
-    return "ターン上限に達しました。"
+        if not reply.tool_calls:  # ★ ツールを頼まれなかったら、それが最終回答
+            return reply.text
+
+        for call in reply.tool_calls:  # 頼まれたツールを 1 つずつ実行する
+            result = run_tool(call.name, call.args)
+            # 結果を履歴に足す。どの頼みへの答えかを tool_call_id で示す
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+
+    return "上限の回数に達したので止めました。"  # ここに来たら答えが出なかったということ
 
 
-if __name__ == "__main__":
-    print(run_agent("プロンプトキャッシュで気をつけることは？"))
+if __name__ == "__main__":  # このファイルを直接実行したときだけ動く部分
+    print(run_agent("キャッシュで気をつけることは？"))
 ```
 
-コードの要点は 3 つある。
+実行すると「メモによると: キャッシュは先頭一致。…」と表示される。コードの要点は 3 つある。
 
-**1. 会話履歴がそのまま状態になる。** API は状態を持たない。`messages` に「依頼 → LLM の応答（ツール呼び出し）→ ツールの結果 → …」を積み上げて毎回丸ごと送る。エージェントの「記憶」は、最も基本的にはこのリストだ。
+**1. 会話の履歴がそのまま「状態」になる。** LLM は前回のやり取りを覚えていない。そのため `messages` に「依頼 → LLM の返事（ツールの依頼）→ ツールの結果 → …」を積み上げて、毎回まるごと渡す。エージェントの「記憶」は、最も基本的にはこのリストだ。
 
-**2. 止まる条件は `stop_reason` で判断する。** 強調した 51〜52 行目のとおり、`stop_reason` が `"tool_use"` のあいだは LLM がツールを求めている。それ以外（`"end_turn"` など）になったら最終回答として返す。
+**2. 止まる条件は「ツールを頼まれたかどうか」。** `reply.tool_calls` が空になった時点で、LLM は答えを書き終えている。サービスによっては「止まった理由」（`finish_reason` や `stop_reason` など）でも判断できる。
 
-**3. ツールの結果は `tool_use_id` で呼び出しと対応づける。** LLM は 1 回の応答で複数のツールを同時に呼ぶことがある。その場合も、結果は**すべて 1 つの user メッセージにまとめて**返す。
+**3. ツールの結果は「どの頼みへの答えか」を付けて返す。** LLM は 1 回の返事で複数のツールを同時に頼むことがある。番号（`tool_call_id`）を付けないと、どの結果がどの依頼のものか分からなくなる。
 
 > [!WARNING] ループには必ず上限を付ける
-> 43・45 行目の `max_turns` がないと、ツールの結果に満足できない LLM が延々と呼び出しを続けることがある。コストの上限としても、ターン数の上限は最初から入れておく。
+> `max_turns` がないと、結果に満足できない LLM がツールを延々と呼び続けることがある。AI サービスは使った量だけ料金がかかるので、コストの上限としても回数の上限は最初から入れておく。
 
-実際には、このループを SDK に任せることもできる。関数にデコレータを付けるだけで、スキーマ生成・実行・ループを SDK が肩代わりする。
-
-```python title="agent_runner.py" caption="SDK のツールランナー版（ベータ）。docstring がそのままツールの説明になる"
-import anthropic
-from anthropic import beta_tool
-
-client = anthropic.Anthropic()
-
-
-@beta_tool
-def read_note(note_id: str) -> str:
-    """ID を指定してメモの全文を読む。
-
-    Args:
-        note_id: search_notes の結果に含まれるメモの ID。
-    """
-    return {"n1": "エージェントとはループでツールを使う LLM のこと。"}.get(note_id, "なし")
-
-
-runner = client.beta.messages.tool_runner(
-    model="claude-opus-5-5",
-    max_tokens=16000,
-    tools=[read_note],
-    messages=[{"role": "user", "content": "メモ n1 には何が書いてある？"}],
-)
-for message in runner:
-    print(message.stop_reason)
-```
-
-仕組みを理解するまでは手で書いたループを、理解したらランナーを使う、という順番をおすすめする。
+LangGraph や各社のエージェント用 SDK などのフレームワークを使うと、このループを自分で書かずに済む。ただし中で起きていることは上の数十行と同じだ。**仕組みを理解するまでは手で書き、理解したらフレームワークに任せる**、という順番をおすすめする。
 
 ## ツール設計：エージェントの性能は道具で決まる
 
-Anthropic のエンジニアリングブログは、ツール設計をこう表現している。「エージェントの効果は、与えたツールの質を超えない」。ツールは人間向けの API とは違う。**読み手が LLM であることを前提に設計する**必要がある。
-
-同社はこれを ACI（Agent-Computer Interface）と呼び、人間向けの画面設計（HCI）と同じだけの手間をかけるべきだとしている。
+どれほど賢いモデルでも、道具の説明が分かりにくければ使い方を間違える。ツールは人間向けの API とは違い、**読み手が LLM であることを前提に設計する**必要がある。この設計を、人間向けの画面設計（HCI）になぞらえて ACI（Agent-Computer Interface）と呼ぶことがある。
 
 ### 悪い例と良い例
 
-同じ「チケットを検索する」ツールを、2 通りに定義してみる。
+同じ「問い合わせを検索する」ツールを、2 通りに定義してみる。
 
 ```python title="tools_bad.py" caption="悪い例。名前も説明も曖昧で、何を返すかも分からない"
 bad_tool = {
-    "name": "search",
-    "description": "検索します",
-    "input_schema": {
+    "name": "search",            # 何を検索するのか分からない
+    "description": "検索します",  # いつ使うのか、何が返るのかが書かれていない
+    "parameters": {
         "type": "object",
-        "properties": {"q": {"type": "string"}, "opt": {"type": "string"}},
+        "properties": {
+            "q": {"type": "string"},    # 「q」が何を表すのか分からない
+            "opt": {"type": "string"},  # 何を入れればいいのか分からない
+        },
     },
 }
 ```
 
-```python title="tools_good.py" caption="良い例。いつ使うか・何を返すか・引数の制約までを説明に書く" {3-7,12}
+```python title="tools_good.py" caption="良い例。いつ使うか・何を返すか・引数の制約までを説明に書く"
 good_tool = {
-    "name": "tickets_search",
+    "name": "tickets_search",  # 「問い合わせ(tickets)の検索」と対象が名前で分かる
     "description": (
-        "サポートチケットを本文とタイトルで全文検索する。"
+        # いつ使うか・何が返るか・隣のツールとの使い分けを、LLM が読む前提で書く
+        "サポートの問い合わせを本文とタイトルで全文検索する。"
         "顧客の過去の問い合わせを調べるときに使う。個別の詳細は tickets_get で取る。"
         "結果は新しい順に最大 limit 件。各件は id・タイトル・状態・作成日だけを含む。"
     ),
-    "input_schema": {
+    "parameters": {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "検索語。例: 'ログインできない'"},
+            # 選べる値を 3 つに限定する。自由に書かせると "Open" や "未対応" のような揺れが出る
             "status": {"type": "string", "enum": ["open", "closed", "all"]},
+            # 件数に上限を付ける。大量の結果は LLM の注意を奪う
             "limit": {"type": "integer", "minimum": 1, "maximum": 20},
         },
-        "required": ["query"],
-        "additionalProperties": False,
+        "required": ["query"],          # 検索語だけは必ず指定させる
+        "additionalProperties": False,  # 説明書に無い引数は受け付けない
     },
-    "strict": True,
 }
 ```
 
@@ -237,133 +304,138 @@ good_tool = {
 
 | 観点 | 悪い例 | 良い例 |
 |---|---|---|
-| 名前 | `search`（何を？） | `tickets_search`（対象を名前空間で区切る） |
+| 名前 | `search`（何を？） | `tickets_search`（対象を名前で区切る） |
 | 説明 | 動作だけ | いつ使うか・何を返すか・隣のツールとの使い分け |
 | 引数 | `q`・`opt` の意味が不明 | 説明と例、`enum` で取りうる値を限定 |
 | 返す量 | 不明 | 件数の上限と含まれる項目を明記 |
-| 型の保証 | なし | `strict: True` でスキーマどおりの引数を保証 |
 
-12 行目の `enum` はポカヨケ（間違えようのない形にする工夫）の典型だ。自由文字列にすると `"Open"` や `"未対応"` のような揺れが入る。取りうる値を列挙すれば、そもそも間違えられない。
+`enum` で選択肢を列挙するのは、ポカヨケ（間違えようのない形にする工夫）の典型だ。自由に書かせると表記が揺れるが、選択肢を決めておけばそもそも間違えられない。
 
 > [!IMPORTANT] ツールを選ぶ基準は人間と同じ
-> 「人間のエンジニアが、この状況でどのツールを使うべきか断言できないなら、エージェントにそれ以上を期待できない」（Anthropic, *Effective context engineering for AI agents*）。機能が重なるツールを並べると、エージェントは迷う。
+> 人間の担当者が「この場面でどのツールを使うべきか」を即答できないなら、LLM にそれ以上を期待することはできない。機能が重なるツールを並べると、エージェントは迷う。
 
-### エラーは「次にどうすればいいか」まで返す
+### 失敗したときは「次にどうすればいいか」まで返す
 
-ツールが失敗したとき、例外のスタックトレースをそのまま返しても LLM は立て直せない。**何が起きたかと、次に何をすればいいか**を文章で返す。
+ツールが失敗したとき、プログラムのエラー表示をそのまま返しても LLM は立て直せない。**何が起きたかと、次に何をすればいいか**を文章で返す。
 
-```python title="tool_errors.py" caption="失敗を LLM が読める形で返す。is_error を付けると失敗として扱われる"
-def tool_result(tool_use_id: str, output: str, *, error: bool = False) -> dict:
-    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": output, "is_error": error}
+```python title="tool_errors.py" caption="失敗を LLM が読める文章で返す。長すぎる結果は切り詰める"
+MAX_CHARS = 4000  # 1 回に返す文字数の上限。長すぎる結果は LLM の注意を分散させる
 
 
-def read_note_safely(tool_use_id: str, note_id: str, notes: dict) -> dict:
+def read_note_safely(note_id: str, notes: dict) -> str:
+    # 存在しない ID を指定されたら、エラーの理由と「次にやること」を伝える
     if note_id not in notes:
-        return tool_result(
-            tool_use_id,
-            f"メモ '{note_id}' はありません。ID は search_notes の結果にある n で始まる文字列です。"
-            "先に search_notes で検索してください。",
-            error=True,
+        return (
+            f"メモ '{note_id}' はありません。"
+            "ID は search_notes の結果にある n で始まる文字列です。先に search_notes で検索してください。"
         )
+
     text = notes[note_id]
-    if len(text) > 4000:
-        # 長すぎる結果は切り詰め、続きの取り方を伝える
-        return tool_result(tool_use_id, text[:4000] + "\n…（以下省略。offset を指定すると続きを読めます）")
-    return tool_result(tool_use_id, text)
+    # 長すぎる場合は途中で切り、「続きがある」ことと続きの読み方を伝える
+    if len(text) > MAX_CHARS:
+        return text[:MAX_CHARS] + "\n…（以下省略。offset を指定すると続きを読めます）"
+    return text
 ```
 
-後半の切り詰めも重要だ。ツールの結果はすべて文脈に積まれる。巨大な結果を返すツールは、次の章で扱う「文脈の予算」を一気に食いつぶす。**ページング・絞り込み・切り詰めに妥当な既定値を持たせる**のが、トークン効率の良いツールの条件になる。
+後半の切り詰めも重要だ。ツールの結果はすべて LLM に渡す文脈に積まれる。巨大な結果を返すツールは、次の章で扱う「文脈の予算」を一気に食いつぶす。**件数の上限・絞り込み・切り詰めに、ちょうどいい既定値を持たせる**のが、よいツールの条件になる。
+
+### 何かを変えるツールには安全装置を付ける
+
+検索や読み取りと違い、書き込み・送信・削除のような**何かを変えるツール**は、間違えたときの被害が大きい。LLM は同じツールを二度呼んだり、途中でやり直したりする。その前提で次の 3 つを備える。
+
+| 安全装置 | 中身 | 防げること |
+|---|---|---|
+| 最小の権限 | そのツールに必要な操作だけを許す（読むだけのツールに書き込み権限を与えない） | 想定外の操作による被害 |
+| 何度呼んでも同じ結果（冪等性） | 同じ依頼番号の登録は 2 回目以降を無視する、など | 二重登録・二重送信 |
+| 試し打ち（ドライラン） | 実際には変更せず「こうなります」だけを返すモード | 本番データを壊す前に確認できる |
 
 ## コンテキストエンジニアリング：LLM に何を見せるか
 
-ループが長くなると、`messages` はどんどん膨らむ。ここで問題になるのが **context rot（文脈の劣化）** だ。文脈に入れるトークンが増えるほど、モデルが個々の情報に払える注意が薄まり、性能が落ちる。
+ループが長くなると、`messages` はどんどん膨らむ。ここで問題になるのが「文脈の劣化」だ。LLM に一度に渡す文章（文脈、コンテキスト）が長くなるほど、モデルが一つひとつの情報に払える注意が薄まり、性能が落ちる。
 
-Anthropic はこれを受けて、プロンプトエンジニアリングを広げた「コンテキストエンジニアリング」という考え方を示した。**推論のたびに、最適なトークンの集合を選んで維持する**技術だ。何を書くかだけでなく、何を入れないか、いつ捨てるかまでを設計する。
+そこで最近は、指示文の書き方（プロンプトエンジニアリング）を広げた **コンテキストエンジニアリング** という考え方が使われている。**LLM を呼ぶたびに、何を見せ、何を見せず、いつ捨てるかを設計する**技術だ。
 
-```flow caption="文脈に入るもの。どれも有限の注意を奪い合う"
+```flow caption="文脈に入るもの。どれも限られた注意を奪い合う"
 direction LR
-A[システム\nプロンプト] --> Z[LLM の\n文脈]:::hl
-B[ツール定義] --> Z
-C[会話履歴] --> Z
+A[システムへの\n指示文] --> Z[LLM の\n文脈]:::hl
+B[ツールの説明書] --> Z
+C[会話の履歴] --> Z
 D[ツールの結果] --> Z
-E[取得した文書] --> Z
+E[取ってきた資料] --> Z
 ```
 
 文脈を管理する手段は、大きく 4 つある。
 
 | 手段 | 何をするか | 効く場面 |
 |---|---|---|
-| 必要なときに取得（Just-in-time） | 全文ではなく ID やパスだけ持ち、必要な分だけツールで読む | 資料が大量にある |
-| キャッシュ | 変わらない先頭部分を再利用して安く速くする | 同じシステムプロンプトで何度も呼ぶ |
-| 圧縮（compaction） | 古い履歴を要約して置き換える | 1 回の作業が長時間続く |
-| 外部メモ | 進捗や決定事項をファイルに書き出す | 文脈がリセットされても続けたい |
+| 必要なときに取りに行く | 全文ではなく ID や場所だけ持ち、必要な分だけツールで読む | 資料が大量にある |
+| 圧縮 | 古い履歴を要約して置き換える | 1 回の作業が長時間続く |
+| 外部メモ | 進捗や決定事項をファイルに書き出す | 途中で文脈がリセットされても続けたい |
+| キャッシュ | 毎回同じ冒頭部分を再利用して、安く速くする | 同じ指示文で何度も呼ぶ |
 
-最小エージェントの `search_notes` → `read_note` という 2 段構えは、まさに「必要なときに取得」の実装になっている。全メモを最初に渡さず、見出しで当たりをつけてから必要な 1 件だけを読む。
+最小エージェントの `search_notes` → `read_note` という 2 段構えは、まさに「必要なときに取りに行く」の実装になっている。全メモを最初に渡さず、見出しで当たりをつけてから必要な 1 件だけを読む。
 
-### システムプロンプトは「ちょうどいい高度」で
+### 指示文は「ちょうどいい高さ」で書く
 
-システムプロンプトは、細かすぎても曖昧すぎても失敗する。
+システムへの指示文（システムプロンプト）は、細かすぎても曖昧すぎても失敗する。
 
 | 失敗の型 | 例 | 何が起きるか |
 |---|---|---|
-| 低すぎる（硬い分岐） | 「A なら X、B なら Y、ただし C のときは…」を延々と列挙 | 想定外の入力で破綻し、保守できなくなる |
-| 高すぎる（曖昧） | 「いい感じに手伝ってください」 | 判断の手がかりがなく、振る舞いがぶれる |
-| ちょうどいい | 目的・判断基準・典型例を少数 | 見たことのない状況でも原則から判断できる |
+| 細かすぎる | 「A なら X、B なら Y、ただし C のときは…」を延々と列挙 | 想定外の入力で破綻し、直すのも大変になる |
+| 曖昧すぎる | 「いい感じに手伝ってください」 | 判断の手がかりがなく、振る舞いがぶれる |
+| ちょうどいい | 目的・判断基準・典型的な例を少数 | 見たことのない状況でも原則から判断できる |
 
-例も同じ考え方で入れる。エッジケースを網羅するより、**多様で典型的な例を少数**見せる方が効く。
+例も同じ考え方で入れる。例外をすべて並べるより、**典型的でばらけた例を少数**見せる方が効く。
 
-### キャッシュと圧縮をコードで入れる
+### 圧縮：長くなった履歴を要約で置き換える
 
-変わらない部分（システムプロンプトとツール定義）はキャッシュし、長くなった履歴はサーバー側で圧縮させる。
+履歴が長くなったら、古い部分を LLM 自身に要約させて置き換える。サービスによってはこれを自動で行う機能もあるが、仕組みは次のとおり単純だ。
 
-```python title="long_running.py" caption="キャッシュと圧縮（compaction、ベータ）を有効にしたループの 1 ターン" {7,12-13,19}
-import anthropic
+```python title="compact.py" caption="履歴が長くなったら、古い部分を要約 1 通に置き換える"
+from llm import call_llm  # 共通の窓口（中身は使うサービスに合わせて書いたもの）
 
-client = anthropic.Anthropic()
-SYSTEM = [{
-    "type": "text",
-    "text": "あなたは社内ナレッジを調べて答えるアシスタントです。…（長い指示）",
-    "cache_control": {"type": "ephemeral"},
-}]
+KEEP_RECENT = 6          # 直近の 6 件は、細部が大事なのでそのまま残す
+MAX_TOTAL_CHARS = 20000  # 履歴全体がこの文字数を超えたら圧縮する
 
 
-def step(messages: list, tools: list):
-    response = client.beta.messages.create(
-        betas=["compact-2026-01-12"],
-        model="claude-opus-5-5",
-        max_tokens=16000,
-        system=SYSTEM,
-        tools=tools,
-        messages=messages,
-        context_management={"edits": [{"type": "compact_20260112"}]},
-    )
-    # 圧縮ブロックも含めて応答を丸ごと履歴に戻す（テキストだけ抜き出すと圧縮状態が消える）
-    messages.append({"role": "assistant", "content": response.content})
-    print("キャッシュから読んだトークン:", response.usage.cache_read_input_tokens)
-    return response
+def compact(messages: list[dict]) -> list[dict]:
+    total = sum(len(str(m.get("content", ""))) for m in messages)  # 履歴全体の文字数を数える
+    if total <= MAX_TOTAL_CHARS or len(messages) <= KEEP_RECENT + 1:
+        return messages  # まだ短いので何もしない
+
+    first, old, recent = messages[0], messages[1:-KEEP_RECENT], messages[-KEEP_RECENT:]
+    # 古い部分を文章にまとめ、「決まったこと・分かったこと・残りの作業」を要約させる
+    old_text = "\n".join(f"{m['role']}: {m.get('content', '')}" for m in old)
+    summary = call_llm(
+        [{"role": "user", "content": "次のやり取りを、決まったこと・分かったこと・残りの作業に分けて短く要約して。\n" + old_text}],
+        tools=[],  # 要約にはツールは要らない
+    ).text
+    # 最初の依頼 ＋ 要約 ＋ 直近のやり取り、の 3 つに置き換える
+    return [first, {"role": "user", "content": "（これまでの要約）\n" + summary}, *recent]
 ```
 
-キャッシュは**先頭一致**で効く。システムプロンプトに現在時刻のような毎回変わる値を入れると、それ以降のキャッシュはすべて無効になる。`cache_read_input_tokens` がずっと 0 なら、どこかで先頭が変わっていると疑う。
+最初の依頼と直近のやり取りを残すのがコツだ。目的と、いま手元でやっている作業の細部は、要約すると失われやすい。
 
 ### 外部メモ：文脈の外に記憶を置く
 
-何時間も続く作業では、圧縮しても情報は落ちていく。そこで、エージェント自身に進捗をファイルへ書かせる。Claude Code が `CLAUDE.md` や TODO リストを使うのと同じ発想だ。
+何時間も続く作業では、圧縮しても情報は少しずつ落ちていく。そこで、エージェント自身に進捗をファイルへ書かせる。人間が作業ノートを付けるのと同じ発想だ。
 
 ```python title="notes_tool.py" caption="エージェントが自分用のメモを読み書きするツール"
-from pathlib import Path
+from pathlib import Path  # ファイルを扱うための道具
 
-NOTES_FILE = Path("NOTES.md")
+NOTES_FILE = Path("NOTES.md")  # メモを保存するファイル
 
+# LLM に渡すツールの説明書。「いつ使うか」まで書いておくと、適切な場面で使ってくれる
 NOTES_TOOLS = [
     {
         "name": "notes_read",
         "description": "作業メモ全体を読む。作業を再開するときや、方針を思い出したいときに最初に使う。",
-        "input_schema": {"type": "object", "properties": {}},
+        "parameters": {"type": "object", "properties": {}},  # 引数なし
     },
     {
         "name": "notes_append",
         "description": "決定事項・分かったこと・残りの作業を 1〜3 行で追記する。区切りのよいところで使う。",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {"text": {"type": "string"}},
             "required": ["text"],
@@ -374,68 +446,74 @@ NOTES_TOOLS = [
 
 def run_notes_tool(name: str, args: dict) -> str:
     if name == "notes_read":
+        # ファイルがあれば中身を返し、無ければ「まだ無い」と伝える
         return NOTES_FILE.read_text(encoding="utf-8") if NOTES_FILE.exists() else "（メモはまだありません）"
+    # notes_append のときは、ファイルの末尾に 1 行書き足す
     with NOTES_FILE.open("a", encoding="utf-8") as f:
         f.write(f"- {args['text']}\n")
     return "追記しました。"
 ```
 
-文脈は揮発する作業机、メモは引き出しだと考えると分かりやすい。机が片付けられても、引き出しを開ければ続きから始められる。
+文脈は片付けられてしまう作業机、メモは引き出しだと考えると分かりやすい。机が片付けられても、引き出しを開ければ続きから始められる。
+
+### キャッシュ：変わらない冒頭を使い回す
+
+多くの AI サービスには、**毎回同じ冒頭部分**（指示文やツールの説明書）を覚えておき、次の呼び出しで安く速く処理する仕組み（プロンプトキャッシュ）がある。設定の書き方はサービスごとに違うが、効かせ方の原則は共通している。
+
+- **変わらないものを先に、変わるものを後ろに置く。** 指示文 → ツールの説明書 → 会話、の順にする
+- **冒頭に毎回変わる値を入れない。** 指示文に現在時刻を埋め込むと、冒頭が毎回変わってキャッシュが効かなくなる
+- **ツールの並び順を固定する。** 順番が変わるだけで「違う冒頭」とみなされる
 
 ## 定番の 5 パターン：ワークフローで組む
 
-エージェントを作る前に、まずワークフローで解けないかを考える。Anthropic は実運用でよく使われる構成を 5 つに整理している。
+エージェントを作る前に、まずワークフローで解けないかを考える。実際によく使われる構成は、次の 5 つに整理できる。
 
 | パターン | 形 | 使いどころ | 例 |
 |---|---|---|---|
 | プロンプトチェーン | 直列に処理をつなぐ | 手順が固定で、段階ごとに確認したい | 下書き → 校正 → 翻訳 |
 | ルーティング | 入力を分類して振り分ける | 種類ごとに最適な処理が違う | 問い合わせを返金・技術・その他へ |
 | 並列化 | 同時に投げてまとめる | 独立した観点がある／多数決で確度を上げたい | 複数観点のレビュー |
-| オーケストレーター・ワーカー | 司令塔が仕事を分けて配る | 必要なサブタスクが事前に読めない | 複数ファイルにまたがる修正 |
-| 評価者・改善者 | 作る側と採点する側で往復 | 評価基準が明確で、直すほど良くなる | 文章の推敲、翻訳の品質向上 |
+| オーケストレーター・ワーカー | 司令塔が仕事を分けて配る | 必要な作業が事前に読めない | 複数ファイルにまたがる修正 |
+| 評価者・改善者 | 作る役と採点する役で往復 | 評価基準が明確で、直すほど良くなる | 文章の推敲、翻訳の品質向上 |
 
 以下のコードは、すべて次の小さな関数を共通で使う。
 
-```python title="llm.py" caption="1 回呼び出すだけの共通関数"
-import anthropic
-
-client = anthropic.Anthropic()
+```python title="ask.py" caption="質問を 1 回投げて、答えの文章だけを受け取る共通の関数"
+from llm import call_llm  # 共通の窓口
 
 
-def ask(prompt: str, system: str = "", effort: str = "low") -> str:
-    response = client.messages.create(
-        model="claude-opus-5-5",
-        max_tokens=16000,
-        system=system,
-        output_config={"effort": effort},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return "".join(b.text for b in response.content if b.type == "text")
+def ask(prompt: str, system: str = "") -> str:
+    """prompt（質問）を LLM に渡し、答えの文章を返す。system には役割の指示を入れられる。"""
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})  # 「あなたは〇〇担当です」のような役割
+    messages.append({"role": "user", "content": prompt})         # 実際の質問
+    return call_llm(messages, tools=[]).text                     # ツールは使わず、文章だけ受け取る
 ```
-
-`effort` は考える深さとトークン消費の調整つまみだ。分類のような軽い仕事は `low`、推敲や設計のような重い仕事は `high` にする。
 
 ### 1. プロンプトチェーン
 
-```python title="chain.py"
-from llm import ask
+```python title="chain.py" caption="章立て → 本文 → 校正、と順番に処理する"
+from ask import ask
 
 
 def write_article(topic: str) -> str:
-    outline = ask(f"「{topic}」の記事の章立てを 5 項目で作って。")
-    if outline.count("\n") < 3:  # ゲート：段階ごとに機械的に確かめられる
-        raise ValueError("章立てが短すぎます")
-    draft = ask(f"次の章立てで本文を書いて。\n{outline}", effort="high")
-    return ask(f"誤字と冗長な表現だけを直して。\n{draft}")
-```
+    outline = ask(f"「{topic}」の記事の章立てを 5 項目で作って。")  # 1 段目: 章立てを作る
 
-段と段のあいだに**プログラムで確かめるゲート**を挟めるのが、チェーンの利点だ。
+    # ★ 段と段のあいだで、プログラムが機械的に確かめる（ここがチェーンの強み）
+    if outline.count("\n") < 3:
+        raise ValueError("章立てが短すぎます")  # おかしければ、次の段に進む前に止める
+
+    draft = ask(f"次の章立てで本文を書いて。\n{outline}")  # 2 段目: 本文を書く
+    return ask(f"誤字と冗長な表現だけを直して。\n{draft}")   # 3 段目: 校正する
+```
 
 ### 2. ルーティング
 
-```python title="route.py"
-from llm import ask
+```python title="route.py" caption="問い合わせの種類を判定して、担当を切り替える"
+from ask import ask
 
+# 種類ごとの担当者への指示
 HANDLERS = {
     "refund": "あなたは返金担当です。規約に沿って手順を案内します。",
     "tech": "あなたは技術サポートです。再現手順を確認してから答えます。",
@@ -444,23 +522,28 @@ HANDLERS = {
 
 
 def route(question: str) -> str:
+    # まず種類だけを 1 語で答えさせる
     label = ask(f"次の問い合わせを refund / tech / other のどれか 1 語で分類して。\n{question}").strip()
-    system = HANDLERS.get(label, HANDLERS["other"])  # 想定外の出力は安全側に倒す
-    return ask(question, system=system, effort="medium")
+    # 想定外の答えが返ってきたら、安全側（総合窓口）に倒す
+    system = HANDLERS.get(label, HANDLERS["other"])
+    return ask(question, system=system)  # 選んだ担当者として答えさせる
 ```
 
 ### 3. 並列化
 
-```python title="parallel.py"
-from concurrent.futures import ThreadPoolExecutor
-from llm import ask
+```python title="parallel.py" caption="観点ごとに同時にレビューさせ、最後にまとめる"
+from concurrent.futures import ThreadPoolExecutor  # 複数の作業を同時に進める道具
+from ask import ask
 
-VIEWPOINTS = ["セキュリティ", "性能", "読みやすさ"]
+VIEWPOINTS = ["セキュリティ", "性能", "読みやすさ"]  # レビューの観点
 
 
 def review(code: str) -> str:
+    # 3 つの観点のレビューを同時に依頼する（順番に待つより速い）
     with ThreadPoolExecutor() as pool:
         reviews = list(pool.map(lambda v: ask(f"{v}の観点だけでレビューして。\n{code}"), VIEWPOINTS))
+
+    # 観点ごとの結果を 1 つの文章にまとめ直す
     joined = "\n\n".join(f"## {v}\n{r}" for v, r in zip(VIEWPOINTS, reviews))
     return ask(f"次のレビューを重要度順に統合して。\n{joined}")
 ```
@@ -469,84 +552,91 @@ def review(code: str) -> str:
 
 ### 4. オーケストレーター・ワーカー
 
-```python title="orchestrator.py"
-import json
-from llm import ask
+```python title="orchestrator.py" caption="司令塔が仕事を分け、担当者に配り、最後にまとめる"
+import json  # 文字列で書かれたリストを、プログラムで扱える形に変換する道具
+from ask import ask
 
 
 def solve(task: str) -> str:
-    plan = ask(
-        f"次のタスクを独立したサブタスクに分け、JSON の文字列配列だけを返して。\n{task}",
-        effort="high",
-    )
+    # 司令塔: 仕事を独立した小さな作業に分けさせる（結果は ["作業1", "作業2"] の形で返させる）
+    plan = ask(f"次のタスクを独立した作業に分け、JSON の文字列配列だけを返して。\n{task}")
     subtasks = json.loads(plan)
+
+    # 担当者: 分けた作業を 1 つずつ処理する（全体の目的も一緒に伝える）
     results = [ask(f"全体の目的: {task}\n担当: {s}") for s in subtasks]
-    return ask("次の結果を統合して最終回答にして。\n" + "\n---\n".join(results), effort="high")
+
+    # 司令塔: 各担当の結果を 1 つの答えにまとめる
+    return ask("次の結果を統合して最終回答にして。\n" + "\n---\n".join(results))
 ```
 
-並列化と似ているが、**サブタスクを LLM 自身が決める**点が違う。事前に分け方を書けない問題に向く。
+並列化と似ているが、**どう分けるかを LLM 自身が決める**点が違う。事前に分け方を書けない問題に向く。
 
 ### 5. 評価者・改善者
 
-```python title="evaluator.py"
-from llm import ask
+```python title="evaluator.py" caption="作る役と採点する役を往復させ、合格するまで直す"
+from ask import ask
 
 
 def refine(task: str, max_rounds: int = 3) -> str:
-    draft = ask(task, effort="high")
-    for _ in range(max_rounds):
+    draft = ask(task)  # まず 1 回作らせる
+
+    for _ in range(max_rounds):  # 最大 max_rounds 回まで直す
+        # 採点役: 基準に沿って評価させる。合格なら PASS とだけ答えさせる
         verdict = ask(
             "次の回答を採点基準（正確さ・具体性・簡潔さ）で評価し、"
             f"合格なら PASS とだけ、不合格なら直すべき点を箇条書きで返して。\n{draft}"
         )
         if verdict.strip() == "PASS":
-            break
-        draft = ask(f"指摘に沿って直して。\n指摘:\n{verdict}\n\n回答:\n{draft}", effort="high")
+            break  # 合格したら終わり
+
+        # 作る役: 指摘を受けて直させる
+        draft = ask(f"指摘に沿って直して。\n指摘:\n{verdict}\n\n回答:\n{draft}")
     return draft
 ```
 
 ```flow caption="評価者・改善者パターン。合格するか上限に達するまで往復する"
-A[生成する] --> B{採点する}
+A[作る] --> B{採点する}
 B -- 不合格 --> C[指摘を受けて直す]
 C --> B
 B -- 合格 --> D([完成])
 ```
 
-採点基準をはっきり言葉にできるときだけ効く。基準が曖昧だと、採点役が毎回違うことを言い出して収束しない。
+採点基準をはっきり言葉にできるときだけ効く。基準が曖昧だと、採点役が毎回違うことを言い出して終わらない。
 
 ## マルチエージェント：分けるほど良くなるわけではない
 
-エージェントを複数に分けると、それぞれが独立した文脈を持てる。Anthropic のリサーチ機能では、Claude Opus 4 を司令塔に、Claude Sonnet 4 をサブエージェントにした構成が、単体の Opus 4 より社内評価で 90.2% 高い成績を出した（2025 年 6 月の記事）。
+エージェントを複数に分けると、それぞれが自分専用の文脈を持てる。Anthropic が公開した自社の調査システムの事例では、上位モデルを司令塔に、軽量なモデルを部下にした複数エージェントの構成が、単体のエージェントより社内評価で 90.2% 高い成績を出した（2025 年 6 月）。
 
-ただし同じ記事は、代償もはっきり書いている。
+ただし同じ事例は、代償もはっきり示している。
 
-| 構成 | トークン消費（チャット比） |
+| 構成 | トークン消費（通常のチャットとの比） |
 |---|---|
 | 通常のチャット | 1 倍 |
 | 単一エージェント | 約 4 倍 |
 | マルチエージェント | 約 15 倍 |
 
-さらに、ブラウジング評価（BrowseComp）での性能差の 80% は**使ったトークン量だけで説明できた**。つまりマルチエージェントの強さの大部分は、「並列にたくさん読めること」から来ている。
+トークンは、AI サービスが文章の量を数える単位で、料金もこの量で決まる。さらにこの事例では、性能差の 80% が**使ったトークンの量だけで説明できた**。つまり複数エージェントの強さの大部分は、「並行して大量に読めること」から来ている。
 
 ここから判断基準が導ける。
 
 | 向いている | 向いていない |
 |---|---|
-| 独立に調べられる論点が多い（広い調査） | 全員が同じ文脈を共有する必要がある |
-| 読む量が多く、1 つの文脈に収まらない | サブタスク同士の依存が強い |
-| 権限を分けたい（個人情報を読む係と書く係） | 並列化しにくい（多くのコーディング作業） |
+| 独立に調べられる論点が多い（広い調査） | 全員が同じ情報を共有する必要がある |
+| 読む量が多く、1 つの文脈に収まらない | 作業同士の依存が強い |
+| 権限を分けたい（個人情報を読む係と、外に送る係） | 並行して進めにくい（多くのコーディング作業） |
 
 ### サブエージェントは「要約を返す関数」として作る
 
-実務でよく使われるのは、司令塔が全体の文脈を持ち、**使い捨てのサブエージェントに調べ物を任せて要約だけ受け取る**形だ。サブエージェントがどれだけ読んでも、司令塔の文脈には要約しか入らない。
+実務でよく使われるのは、司令塔が全体の文脈を持ち、**使い捨ての部下（サブエージェント）に調べ物を任せて、要約だけ受け取る**形だ。部下がどれだけ大量に読んでも、司令塔の文脈には要約しか入らない。
 
-```python title="subagent.py" caption="サブエージェントをツールとして司令塔に渡す" {9-11}
-from agent import run_agent  # 最初に作った最小エージェント
+```python title="subagent.py" caption="部下のエージェントを、司令塔から使える「ツール」として渡す"
+from agent import run_agent  # 最初に作った最小のエージェントを、部下として使い回す
 
+# 司令塔に渡すツールの説明書。「調べ物を任せる」ためのツール
 SUBAGENT_TOOL = {
     "name": "delegate_research",
     "description": "独立した調べ物を別のエージェントに任せ、結論の要約だけを受け取る。広く読む必要がある調査に使う。",
-    "input_schema": {
+    "parameters": {
         "type": "object",
         "properties": {
             "objective": {"type": "string", "description": "何を明らかにしたいか"},
@@ -559,32 +649,38 @@ SUBAGENT_TOOL = {
 
 
 def delegate_research(objective: str, output_format: str, boundaries: str = "") -> str:
-    brief = f"目的: {objective}\n出力形式: {output_format}\n範囲外: {boundaries or 'なし'}\n2,000 字以内で結論だけ返すこと。"
-    return run_agent(brief)
+    # 部下への依頼文を組み立てる。目的・返す形・範囲外をはっきり書くのが要
+    brief = (
+        f"目的: {objective}\n"
+        f"出力形式: {output_format}\n"
+        f"範囲外: {boundaries or 'なし'}\n"
+        "2,000 字以内で結論だけ返すこと。"
+    )
+    return run_agent(brief)  # 部下を動かし、最後の答え（要約）だけを司令塔に返す
 ```
 
-入力に `objective`・`output_format`・`boundaries` を要求しているのには理由がある。Anthropic のリサーチ機能の知見では、委任が失敗する主因は指示の曖昧さだった。サブエージェントには**目的・出力形式・使う道具・作業の境界**を必ず渡す。
+依頼に「目的」「返す形」「範囲外」を必ず含めているのには理由がある。仕事の任せ方が失敗する主な原因は、指示の曖昧さだ。部下には**何のために・どんな形で・どこまで**を必ず渡す。
 
-## 外部接続の標準化：MCP と Skills
+## 外部とのつなぎ方の標準：MCP と Skills
 
-ツールを増やしていくと、「Slack とつなぐ」「DB とつなぐ」を毎回ゼロから書くことになる。これを標準化したのが **MCP（Model Context Protocol）** だ。
+ツールを増やしていくと、「チャットツールとつなぐ」「データベースとつなぐ」を毎回ゼロから書くことになる。これを標準化したのが **MCP（Model Context Protocol）** だ。USB が機器とパソコンのつなぎ方を統一したように、AI とツールのつなぎ方を統一する。
 
-```flow caption="MCP があると、ツールの実装とエージェントを独立に作れる"
+```flow caption="MCP があると、ツールの実装とエージェントを別々に作れる"
 direction LR
 A[エージェント\nMCP クライアント] --> B[MCP サーバー\nGitHub]
-A --> C[MCP サーバー\nDB]
-A --> D[MCP サーバー\n社内 API]
+A --> C[MCP サーバー\nデータベース]
+A --> D[MCP サーバー\n社内システム]
 ```
 
-MCP はもともと Anthropic が公開した仕様だが、2025 年 12 月に Linux Foundation 傘下の Agentic AI Foundation に寄贈され、ベンダー中立の標準になった。執筆時点の最新仕様は 2026-07-28 版だ。
+MCP は Anthropic が 2024 年に公開した仕様だが、2025 年 12 月に Linux Foundation 傘下の Agentic AI Foundation に寄贈され、特定の企業に属さない標準になった。現在は主要な AI 各社が対応しており、執筆時点の最新仕様は 2026-07-28 版だ。
 
 | 概念 | 役割 | 例 |
 |---|---|---|
-| MCP サーバー | ツール・リソース・プロンプトを公開する | GitHub の Issue を検索するサーバー |
-| MCP クライアント | サーバーにつなぎ、LLM へツールとして渡す | Claude Code、自作エージェント |
-| Skills | 「この種の仕事はこう進める」という手順書をエージェントが必要なときに読み込む | 「記事を書くときの手順」「社内のデプロイ手順」 |
+| MCP サーバー | ツール・資料・定型の指示を公開する | GitHub の Issue を検索できるサーバー |
+| MCP クライアント | サーバーにつなぎ、LLM にツールとして渡す | AI アシスタントのアプリ、自作のエージェント |
+| Skills（スキル） | 「この種の仕事はこう進める」という手順書を、必要なときに読み込ませる | 「記事を書くときの手順」「社内のリリース手順」 |
 
-MCP が**手足（何ができるか）**を増やす仕組みだとすれば、Skills は**段取り（どう進めるか）**を増やす仕組みだ。どちらも、必要になったときに初めて文脈へ読み込む（段階的開示）ことで、文脈の予算を守っている。
+MCP が**手足（何ができるか）** を増やす仕組みだとすれば、Skills は**段取り（どう進めるか）** を増やす仕組みだ。どちらも、必要になったときに初めて文脈へ読み込む（段階的に見せる）ことで、文脈の予算を守っている。
 
 ## 本番運用：安全策と評価
 
@@ -592,89 +688,94 @@ MCP が**手足（何ができるか）**を増やす仕組みだとすれば、
 
 ### 1. プロンプトインジェクション：「3 つを同時に持たせない」
 
-エージェントは、読んだ文章に書かれた指示に従ってしまうことがある。Web ページやメールに「このデータを外部に送れ」と仕込まれると、それを実行しかねない。
+エージェントは、読んだ文章に書かれた指示に従ってしまうことがある。Web ページやメールに「このデータを外部に送れ」と仕込まれていると、それを実行しかねない。これをプロンプトインジェクションと呼ぶ。
 
-研究者 Simon Willison は 2025 年に、危険な組み合わせを **lethal trifecta（致命的な三点セット）** と名付けた。
+研究者の Simon Willison は 2025 年に、危険な組み合わせを **lethal trifecta（致命的な三点セット）** と名付けた。
 
 | 能力 | 例 |
 |---|---|
-| 私的なデータにアクセスできる | 社内文書、メール、顧客情報 |
-| 信頼できない入力を読む | Web ページ、受信メール、外部の Issue |
-| 外部に送信できる | メール送信、HTTP リクエスト、公開投稿 |
+| 私的なデータを読める | 社内文書、メール、顧客情報 |
+| 信頼できない文章を読む | Web ページ、届いたメール、外部からの書き込み |
+| 外部に送信できる | メール送信、Web への送信、公開投稿 |
 
-3 つが揃うと、読んだ文章に仕込まれた指示でデータが外に抜ける。Meta はこれを受けて **Agents Rule of Two** を提案した。無監督のエージェントには 3 つのうち最大 2 つまでしか持たせず、3 つ目が必要な操作には人間の承認を挟む、という原則だ。
+3 つが揃うと、読んだ文章に仕込まれた指示でデータが外に漏れる。Meta はこれを受けて **Agents Rule of Two** を提案した。人の監督なしに動くエージェントには 3 つのうち最大 2 つまでしか持たせず、3 つ目が必要な操作には人間の承認を挟む、という原則だ。
 
-入力をフィルタして防ぐ手法は、適応的な攻撃で突破されることが報告されている。**フィルタより権限設計で守る**のが基本になる。
+怪しい指示を文字列のチェックで弾く方法は、工夫された攻撃で突破されることが報告されている。**チェックより、権限の組み合わせで守る**のが基本になる。
 
 ### 2. 人間の承認を挟む
 
 取り返しのつかない操作は、実行前に止める。最小エージェントの `run_tool` の手前に、承認の関所を置く。
 
-```python title="approval.py" caption="危険なツールだけ人間の承認を求める" {1,5-7}
+```python title="approval.py" caption="危険なツールだけ、人間の承認を求める"
+# 実行前に人間の確認が必要なツールの一覧（メール送信・削除・本番反映など）
 NEEDS_APPROVAL = {"send_email", "delete_record", "deploy"}
 
 
-def run_tool_with_approval(name: str, args: dict, run_tool) -> tuple[str, bool]:
+def run_tool_with_approval(name: str, args: dict, run_tool) -> str:
     if name in NEEDS_APPROVAL:
+        # 画面に確認を出し、y と入力されたときだけ実行する
         answer = input(f"[承認] {name} を {args} で実行しますか？ (y/N): ")
         if answer.strip().lower() != "y":
-            return "ユーザーが実行を拒否しました。別の方法を提案するか、理由を説明してください。", True
+            # ★ 断ったことも結果として LLM に伝える（黙ると同じ依頼を繰り返す）
+            return "ユーザーが実行を拒否しました。別の方法を提案するか、理由を説明してください。"
     try:
-        return run_tool(name, args), False
-    except Exception as exc:  # ツールの失敗は LLM に伝えて立て直させる
-        return f"実行に失敗しました: {exc}", True
+        return run_tool(name, args)  # 承認済み、または確認が要らないツールは実行する
+    except Exception as exc:
+        # ツールが失敗しても止まらず、失敗したことを LLM に伝えて立て直させる
+        return f"実行に失敗しました: {exc}"
 ```
 
-拒否したときも、結果を黙って捨てずに**拒否されたことをツール結果として返す**。そうしないと LLM は「なぜ結果が来ないのか」を知らないまま同じ呼び出しを繰り返す。
+断ったときも、結果を黙って捨てずに**断られたことをツールの結果として返す**。そうしないと LLM は「なぜ結果が来ないのか」を知らないまま同じ依頼を繰り返す。
 
-> [!NOTE] 拒否された応答への備え
-> Claude の新しいモデルは、安全分類器が要求を断ると `stop_reason: "refusal"` を返すことがある。ループでは `stop_reason` を必ず確認し、`refusal` を最終回答として扱わないようにする。Claude API には、断られたときに別モデルで自動再実行するフォールバック機能（ベータ）もある。
+> [!NOTE] AI サービス側が断ることもある
+> 多くの AI サービスは、安全上の理由で応答を断ることがある。断られた応答を最終回答として扱わないよう、ループでは「止まった理由」を確認しておく。
 
 ### 3. 評価：「1 回できた」と「毎回できる」は違う
 
-エージェントは確率的に動く。同じ課題でも成功したり失敗したりする。Anthropic の評価ガイド（2026 年 1 月）は、2 つの指標を区別するよう勧めている。
+エージェントは確率的に動く。同じ課題でも成功したり失敗したりする。そこで評価では、2 つの指標を区別する。
 
-| 指標 | 意味 | k を増やすと |
+| 指標 | 意味 | 試す回数 k を増やすと |
 |---|---|---|
 | pass@k | k 回試して **1 回でも**成功する確率 | 上がる |
 | pass^k | k 回試して **すべて**成功する確率 | 下がる |
 
-開発中の「できた！」は pass@k 的な感覚だ。しかし利用者に毎回任せるなら、見るべきは pass^k の方になる。
+開発中の「できた！」は pass@k の感覚だ。しかし利用者に毎回任せるなら、見るべきは pass^k の方になる。
 
-```python title="metrics.py" caption="試行結果から 2 つの指標を計算する"
+```python title="metrics.py" caption="試した結果から、2 つの指標を計算する"
 def pass_at_k(results: list[bool], k: int) -> float:
-    """1 回の成功率 p から、k 回中 1 回以上成功する確率を見積もる。"""
-    p = sum(results) / len(results)
-    return 1 - (1 - p) ** k
+    """k 回試して、1 回でも成功する確率を見積もる。"""
+    p = sum(results) / len(results)  # 1 回あたりの成功率（True の数 ÷ 全体の数）
+    return 1 - (1 - p) ** k          # 「k 回すべて失敗する確率」を 1 から引く
 
 
 def pass_hat_k(results: list[bool], k: int) -> float:
-    """k 回すべて成功する確率を見積もる。"""
+    """k 回試して、すべて成功する確率を見積もる。"""
     p = sum(results) / len(results)
-    return p ** k
+    return p ** k                    # 成功率を k 回かけ合わせる
 
 
-trials = [True, True, False, True, True, True, False, True, True, True]  # 成功率 80%
-print(f"pass@3 = {pass_at_k(trials, 3):.3f}")  # 0.992
-print(f"pass^3 = {pass_hat_k(trials, 3):.3f}")  # 0.512
+# 10 回試して 8 回成功した（成功率 80%）という結果
+trials = [True, True, False, True, True, True, False, True, True, True]
+print(f"pass@3 = {pass_at_k(trials, 3):.3f}")   # 0.992 … 3 回に 1 回成功すればよい用途
+print(f"pass^3 = {pass_hat_k(trials, 3):.3f}")  # 0.512 … 3 回連続で成功しなければならない用途
 ```
 
-成功率 80% のエージェントは、3 回に 1 回でも成功すればいい用途なら 99% 信頼できる。しかし 3 回連続で成功しなければならない用途では、半分しか信頼できない。
+成功率 80% のエージェントは、3 回に 1 回成功すればいい用途なら 99% 信頼できる。しかし 3 回連続で成功しなければならない用途では、半分しか信頼できない。
 
-採点は 1 種類に頼らない。ファイルや DB の状態を確かめる**コードによる採点**、文章の質を見る **LLM による採点**、そして両者がずれていないかを確かめる**人間の確認**を組み合わせる。
+採点は 1 種類に頼らない。ファイルやデータの状態を確かめる**プログラムによる採点**、文章の質を見る **LLM による採点**、そして両者がずれていないかを確かめる**人間の確認**を組み合わせる。
 
 ## フレームワークの選び方
 
-ここまでのコードは、あえてフレームワークを使わずに書いた。Anthropic の記事も「まず API を直接使え。フレームワークを使うなら、中で何が起きているか理解してから」と勧めている。そのうえで、主要なものの考え方の違いを整理する。
+ここまでのコードは、あえてフレームワークを使わずに書いた。各社の構築ガイドも「まず API を直接使い、フレームワークを使うなら中で何が起きているかを理解してから」と勧めている。そのうえで、主要なものの考え方の違いを整理する（五十音・アルファベット順）。
 
 | フレームワーク | 中心にある考え方 | 向いている場面 |
 |---|---|---|
-| Claude Agent SDK | Claude Code の仕組み（ファイル操作・コマンド実行・サブエージェント・フック・MCP）をライブラリとして使う | ファイルやコードを扱うエージェントを手早く作る |
-| OpenAI Agents SDK | エージェント間で制御を渡す「handoff」 | 役割の違うエージェントへ会話を引き継ぐ |
-| LangGraph | 処理をグラフ（状態機械）として定義する | 分岐が多く、途中保存や人間の承認を細かく制御したい |
-| Google ADK | Google Cloud と組み合わせるアプリケーション層、エージェント間通信（A2A） | GCP 中心の環境、マルチモーダル |
+| Claude Agent SDK | ファイル操作・コマンド実行・部下のエージェント・MCP をひとまとめにした道具箱 | ファイルやコードを扱うエージェントを手早く作る |
+| Google ADK | Google Cloud と組み合わせるアプリケーションの部品、エージェント同士の通信（A2A） | Google Cloud 中心の環境、画像や音声も扱う |
+| LangGraph | 処理の流れを「状態の移り変わりを表す図」として定義する | 分岐が多く、途中保存や人間の承認を細かく制御したい |
+| OpenAI Agents SDK | エージェント同士で担当を引き継ぐ「handoff」 | 役割の違うエージェントへ会話を引き継ぐ |
 
-機能の細部は頻繁に変わるので、選ぶときは各公式ドキュメントで最新版を確認してほしい。判断の軸は「**制御フローを誰が持つか**」だ。コードで細かく握りたいなら LangGraph、LLM に任せて道具を揃えたいなら Agent SDK 系、という見方をすると迷いにくい。
+機能の細部は頻繁に変わるので、選ぶときは各公式ドキュメントで最新版を確認してほしい。判断の軸は「**次に何をするかを誰が決めるか**」だ。プログラムで細かく決めたいなら LangGraph のような図で定義する型、LLM に任せて道具を揃えたいなら各社の SDK、という見方をすると迷いにくい。
 
 ## 設計チェックリスト
 
@@ -683,25 +784,32 @@ print(f"pass^3 = {pass_hat_k(trials, 3):.3f}")  # 0.512
 | 段階 | 確かめること |
 |---|---|
 | 作る前 | 1 回の呼び出しやワークフローで解けないか。4 つの問いを満たすか |
-| ループ | ターン上限があるか。`stop_reason` の全パターンを扱っているか |
-| ツール | 名前と説明だけで使い分けられるか。引数を `enum` などで絞ったか。エラーで次の手を伝えているか |
-| 文脈 | 全部渡していないか。キャッシュの先頭に変わる値が入っていないか。長時間なら圧縮と外部メモがあるか |
-| 構成 | 分ける理由（独立性・読む量・権限）があるか。サブエージェントに目的・形式・境界を渡したか |
+| ループ | 回数の上限があるか。「ツールを頼まれなかった」以外の止まり方（断られた・途中で切れた）も扱っているか |
+| ツール | 名前と説明だけで使い分けられるか。引数を選択肢などで絞ったか。失敗時に次の手を伝えているか |
+| 文脈 | 全部渡していないか。冒頭に毎回変わる値が入っていないか。長時間なら圧縮と外部メモがあるか |
+| 構成 | 分ける理由（独立性・読む量・権限）があるか。部下に目的・形式・範囲を渡したか |
 | 安全 | 3 つの能力を同時に持たせていないか。取り返しのつかない操作に承認があるか |
-| 評価 | pass^k で見ているか。コード・LLM・人間の採点を組み合わせたか |
+| 評価 | pass^k で見ているか。プログラム・LLM・人間の採点を組み合わせたか |
 
 エージェントの性能を上げたくなったとき、最初に疑うべきはモデルではない。**ツールの説明、文脈の中身、ループの止め方**だ。この 3 つを整えるだけで、同じモデルが別物のように働き始める。
 
 ## 参考文献
 
+- Shunyu Yao ほか, [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629)（arXiv 2022 / ICLR 2023）
+- Lilian Weng, [LLM Powered Autonomous Agents](https://lilianweng.github.io/posts/2023-06-23-agent/)（2023-06-23）
 - Anthropic, [Building Effective AI Agents](https://www.anthropic.com/engineering/building-effective-agents)（2024-12-19）
+- OpenAI, [A practical guide to building agents](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/)（2025）
 - Anthropic, [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)（2025-06-13）
-- Anthropic, [Writing effective tools for agents — with agents](https://www.anthropic.com/engineering/writing-tools-for-agents)（2025-09-11）
 - Anthropic, [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)（2025-09-29）
 - Anthropic, [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)（2026-01）
 - Model Context Protocol, [Specification 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28)
-- Model Context Protocol Blog, [The 2026 MCP Roadmap](https://blog.modelcontextprotocol.io/posts/2026-mcp-roadmap/)
 - Airia, [AI Security in 2026: Prompt Injection, the Lethal Trifecta, and How to Defend](https://airia.com/blog/ai-security-in-2026-prompt-injection-the-lethal-trifecta-and-how-to-defend/)（lethal trifecta と Rule of Two の解説）
 - LangChain, [The best AI agent frameworks in 2026](https://www.langchain.com/resources/ai-agent-frameworks)
+- 各社の関数呼び出しの呼び名の比較: [Function Calling: OpenAI vs Anthropic vs Google (2026)](https://qveris.ai/guides/function-calling/)
 
-※ モデル名・API の書き方は 2026 年 9 月時点の Anthropic 公式 SDK に基づく。
+### 日本語で読める関連記事
+
+- startspace, [AIエージェントはなぜ動き続けるのか｜Control Flowで理解するループの本質](https://zenn.dev/startspace/articles/15e9e68d8346a7)（Zenn, 2026-04）— ループを「状態・判断・行動・観察」で説明し、フレームワークごとの制御の違いを比べている
+- 株式会社ナレッジワーク, [AIコーディングエージェント開発で学ぶコンテキストエンジニアリング入門](https://zenn.dev/knowledgework/articles/intro-context-engineering-on-dev-ai-coding-agent)（Zenn, 2025-10）— 文脈の制約への対処を「ツール・記憶・処理の分担」に整理している
+
+※ 各サービスの機能名・仕様は 2026 年 9 月時点のもの。

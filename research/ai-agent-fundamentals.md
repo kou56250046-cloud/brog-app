@@ -63,3 +63,26 @@
 - 「2026-05 の Dynamic Workflows で最大 1,000 並列サブエージェント」— 二次情報のみ。記事では使わない
 - MCP の Skills over MCP / MCP Apps の正式な位置づけ — 仕様本文で要確認
 - SDK の細かい API は執筆時に claude-api スキルと context7 で確認する
+
+---
+
+# 追補（2026-09-29）: 一般化と日本語コミュニティの調査
+
+記事を特定ベンダーに寄せない形へ書き直すために追加で調べた。
+
+## 事実（出典付き）
+- エージェント ＝ LLM ＋ 計画 ＋ 記憶 ＋ ツール使用 — [Lilian Weng, LLM Powered Autonomous Agents](https://lilianweng.github.io/posts/2023-06-23-agent/)（2023-06-23）
+- 推論と行動を交互に行う ReAct。few-shot で CoT と同等以上、対話的タスクで模倣学習・強化学習の基準を上回る — [Yao et al., ReAct](https://arxiv.org/abs/2210.03629)（arXiv 2022 / ICLR 2023）
+- OpenAI の構築ガイド: エージェントの定義、オーケストレーションのパターン、ガードレールの種類 — [A practical guide to building agents](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/)（2025）
+- ツール呼び出しの呼び名: OpenAI は tools / tool_calls、Google は function calling / functionCall、Anthropic は tool use / tool_use — [qveris.ai の比較](https://qveris.ai/guides/function-calling/)（2026）
+
+## 日本語コミュニティ（Zenn・Qiita）
+| 記事 | 媒体・日付 | 評価 |
+|---|---|---|
+| [AIエージェントはなぜ動き続けるのか](https://zenn.dev/startspace/articles/15e9e68d8346a7) | Zenn 2026-04 | 状態・判断・行動・観察のループ。技術的に妥当。関連記事として掲載 |
+| [AIコーディングエージェント開発で学ぶコンテキストエンジニアリング入門](https://zenn.dev/knowledgework/articles/intro-context-engineering-on-dev-ai-coding-agent) | Zenn（企業技術ブログ）2025-10 | Tools / Memory / Processing の整理が本記事と一致。関連記事として掲載 |
+| [Function Calling（ツール）設計の実践ガイド](https://qiita.com/akira_papa_AI/items/453653c71f3753910785) | Qiita 2026-06 | 単一責務・スキーマ厳格化・安全機構（最小権限・冪等性・ドライラン）。いいね 0 のため出典にはせず、一般的な設計原則として安全装置の節に反映 |
+| [Tool Callingとは？Function Callingとの違い](https://qiita.com/Sho5_Matsu/items/24ed5e395bc2e6b388ea) | Qiita | 日本語記事で Function Calling / Tool Calling の呼び名が混在していることの確認に使用 |
+
+## 日本語での用語の定着
+- 「Function Calling」「Tool Calling」「ツール呼び出し」が混在。「ワークフロー型／エージェント型」という対比も Zenn で一般的

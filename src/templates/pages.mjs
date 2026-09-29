@@ -4,13 +4,20 @@ import { LEVELS } from "../lib/content.mjs";
 
 const LEVEL_KEYS = Object.keys(LEVELS);
 
-/** 入門→実践→発展 のうち、記事が扱う範囲を塗った目盛り */
-function levelTrack(levels, size = "") {
-  const label = levels.map((l) => LEVELS[l].label).join("〜");
-  return `<span class="level-track ${size}" role="img" aria-label="難易度: ${label}">${map(
+/**
+ * 入門→実践→発展 のうち、記事が扱う範囲を塗った目盛り。
+ * 範囲は色だけに頼らず、塗り／斜線の質感と、横に添える文字でも示す
+ */
+function levelTrack(levels) {
+  const all = LEVEL_KEYS.every((k) => levels.includes(k));
+  const note = all ? "全範囲" : levels.length === 1 ? `${levelRange(levels)}のみ` : levelRange(levels);
+  return `<div class="post-level">
+  <span class="level-track" aria-hidden="true">${map(
     LEVEL_KEYS,
     (k) => `<span class="lv${levels.includes(k) ? " on" : ""}">${LEVELS[k].label}</span>`
-  )}</span>`;
+  )}</span>
+  <span class="level-note"><span class="sr-only">難易度: </span>${all ? `${levelRange(levels)}の${note}` : note}</span>
+</div>`;
 }
 
 function levelRange(levels) {
@@ -44,38 +51,31 @@ function entryList(items, depth, data) {
 
 /* ---------- トップ ---------- */
 
+/** 絞り込みやカテゴリー一覧が意味を持ち始める記事数。これ未満では出さない */
+const FACET_MIN_ARTICLES = 3;
+
+function chipRow(filter, label, items) {
+  const id = `filter-${filter}`;
+  return `<div class="chip-row" role="group" aria-labelledby="${id}" data-filter="${filter}">
+        <span class="chip-label" id="${id}">${label}</span>
+        ${map(items, (it, i) => `<button type="button" class="chip${i === 0 ? " on" : ""}" aria-pressed="${i === 0}" data-value="${escapeHtml(it.value)}">${escapeHtml(it.label)}${it.count ? `<span>${it.count}</span>` : ""}</button>`)}
+      </div>`;
+}
+
 export function home(data, site) {
   const depth = 0;
   const r = (p) => rel(depth, p);
-  return `<section class="home-hero">
-  <div class="wrap">
-    <h1>${escapeHtml(site.tagline)}</h1>
-    <p class="home-lead">${escapeHtml(site.description)}。</p>
-    <form class="big-search" role="search" onsubmit="return false">
-      <label class="sr-only" for="q">記事を検索</label>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
-      <input id="q" type="search" placeholder="キーワードで記事を検索（本文・コード説明も対象）" autocomplete="off" />
-    </form>
-    <div class="filters" aria-label="絞り込み">
-      <div class="chip-row" data-filter="cat">
-        <button type="button" class="chip on" data-value="">すべて</button>
-        ${map(data.categories, (c) => `<button type="button" class="chip" data-value="${escapeHtml(c.name)}">${escapeHtml(c.name)}<span>${c.count}</span></button>`)}
-      </div>
-      <div class="chip-row" data-filter="level">
-        <button type="button" class="chip on" data-value="">全レベル</button>
-        ${map(LEVEL_KEYS, (k) => `<button type="button" class="chip" data-value="${k}">${LEVELS[k].label}</button>`)}
-      </div>
-    </div>
-  </div>
-</section>
+  const facets = data.articles.length >= FACET_MIN_ARTICLES;
 
-<div class="wrap home-grid">
-  <section id="articles" aria-labelledby="articles-h">
-    <h2 id="articles-h" class="section-h">記事<span class="count" data-count>${data.stats.articleCount}本</span></h2>
-    <p class="search-status" data-status hidden></p>
-    <div data-list>${data.articles.length ? entryList(data.articles, depth, data) : '<p class="empty">まだ記事がありません。「〜について記事を作成して」と頼むと、リサーチから始まります。</p>'}</div>
-  </section>
-  <aside class="home-side">
+  const filters = facets
+    ? `<div class="filters">
+      ${chipRow("cat", "カテゴリ", [{ value: "", label: "すべて" }, ...data.categories.map((c) => ({ value: c.name, label: c.name, count: c.count }))])}
+      ${chipRow("level", "レベル", [{ value: "", label: "すべて" }, ...LEVEL_KEYS.map((k) => ({ value: k, label: LEVELS[k].label }))])}
+    </div>`
+    : "";
+
+  const side = facets
+    ? `<aside class="home-side">
     <section>
       <h2 class="side-h">カテゴリー</h2>
       <ul class="cat-list">
@@ -87,7 +87,29 @@ export function home(data, site) {
       <p class="tag-cloud">${map(data.tags.slice(0, 24), (t) => `<a href="${r(t.url)}">${escapeHtml(t.name)}<span>${t.count}</span></a>`)}</p>
       <p><a class="more" href="${r("tags.html")}">すべてのタグを見る</a></p>
     </section>
-  </aside>
+  </aside>`
+    : "";
+
+  return `<section class="home-hero">
+  <div class="wrap">
+    <h1>${escapeHtml(site.tagline)}</h1>
+    <p class="home-lead">${escapeHtml(site.description)}。</p>
+    <form class="big-search" role="search" onsubmit="return false">
+      <label class="sr-only" for="q">記事を検索</label>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+      <input id="q" type="search" placeholder="キーワードで記事を検索（本文・コード説明も対象）" autocomplete="off" />
+    </form>
+    ${filters}
+  </div>
+</section>
+
+<div class="wrap home-grid${side ? "" : " no-side"}">
+  <section id="articles" aria-labelledby="articles-h">
+    <h2 id="articles-h" class="section-h">記事<span class="count" data-count>${data.stats.articleCount}本</span></h2>
+    <p class="search-status" role="status" data-status></p>
+    <div data-list>${data.articles.length ? entryList(data.articles, depth, data) : '<p class="empty">まだ記事がありません。「〜について記事を作成して」と頼むと、リサーチから始まります。</p>'}</div>
+  </section>
+  ${side}
 </div>`;
 }
 
@@ -119,11 +141,12 @@ export function articlePage({ article: a, html, headings, related, prev, next, s
   return `<article class="post">
   <header class="post-head wrap">
     <p class="post-crumb"><a href="${r("")}">記事一覧</a><span aria-hidden="true">／</span><a href="${r(cat.url)}">${escapeHtml(a.category)}</a></p>
+    ${levelTrack(a.levels)}
     <h1>${escapeHtml(a.title)}</h1>
     <p class="post-desc">${escapeHtml(a.description)}</p>
     <dl class="spec">
-      <div><dt>難易度</dt><dd>${levelTrack(a.levels, "lg")}</dd></div>
-      <div><dt>公開</dt><dd><time datetime="${a.date}">${formatDate(a.date)}</time>${a.updated ? `（更新 <time datetime="${a.updated}">${formatDate(a.updated)}</time>）` : ""}</dd></div>
+      <div><dt>公開</dt><dd><time datetime="${a.date}">${formatDate(a.date)}</time>${a.updated ? `<br /><span class="spec-sub">更新 <time datetime="${a.updated}">${formatDate(a.updated)}</time></span>` : ""}</dd></div>
+      ${when(a.verified, `<div><dt>情報の確認日</dt><dd><time datetime="${a.verified}">${formatDate(a.verified)}</time></dd></div>`)}
       <div><dt>読了</dt><dd>約${a.minutes}分${a.codeLines ? `（コード${a.codeLines}行）` : ""}</dd></div>
       <div><dt>タグ</dt><dd class="tags">${map(a.tags, (t) => `<a href="${r(data.tagByName.get(t).url)}">${escapeHtml(t)}</a>`)}</dd></div>
     </dl>

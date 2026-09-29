@@ -227,9 +227,9 @@
 
     if (countEl) countEl.textContent = shown + "本";
     if (status) {
+      // role="status" の領域は消さずに中身だけ替える（hidden にすると読み上げられないことがある）
       var active = terms.length || filter.cat || filter.level;
-      status.hidden = !active;
-      status.textContent = shown
+      status.textContent = !active ? "" : shown
         ? (terms.length ? "「" + input.value.trim() + "」を含む記事 " + shown + "本" : shown + "本に絞り込み中")
         : "該当する記事がありません。語を減らすか、絞り込みを「すべて」に戻してください。";
     }
@@ -239,7 +239,10 @@
     row.addEventListener("click", function (e) {
       var chip = e.target.closest(".chip");
       if (!chip) return;
-      row.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("on", c === chip); });
+      row.querySelectorAll(".chip").forEach(function (c) {
+        c.classList.toggle("on", c === chip);
+        c.setAttribute("aria-pressed", String(c === chip));
+      });
       filter[row.dataset.filter] = chip.dataset.value;
       apply();
     });

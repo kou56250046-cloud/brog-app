@@ -15,6 +15,7 @@ title: LLMに"ループ"を渡した瞬間、エージェントが生まれる
 description: 検索結果と一覧に出る 1〜2 文。何が分かるようになるかを書く
 date: "2026-09-29"
 updated: ""                 # 大きく直したら日付を入れる
+verified: "2026-09-29"      # 記事中の事実（仕様・数値・モデル名）を最後に確かめた日。リサーチした日を入れる
 category: AIエージェント     # site.config.mjs の categories にあるものを使う
 tags: [LLM, Claude API, Python]
 level: [basic, practice, advanced]   # 入門 / 実践 / 発展。扱う範囲をすべて

@@ -49,6 +49,8 @@ function loadArticles() {
         description: String(data.description ?? ""),
         date: String(data.date ?? ""),
         updated: data.updated ? String(data.updated) : "",
+        /** 記事中の事実（仕様・数値・モデル名）を最後に確かめた日 */
+        verified: data.verified ? String(data.verified) : "",
         category: String(data.category ?? "未分類"),
         tags: toArray(data.tags),
         levels: levels.length ? levels : ["basic"],

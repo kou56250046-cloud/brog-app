@@ -2,6 +2,7 @@
 title: AIエージェントは「賢さ」より「設計」で決まる——ツール・文脈・評価まで実装で理解する
 description: LLM にループとツールを渡すと何が起きるのか。最小 50 行のエージェントから、ツール設計・コンテキストエンジニアリング・5 つの定番パターン・マルチエージェント・MCP・本番運用まで、Python のコードと図で基礎から発展まで分解する。
 date: "2026-09-29"
+verified: "2026-09-29"
 category: AIエージェント
 tags: [AIエージェント, LLM, Claude API, Python, コンテキストエンジニアリング, MCP, 設計パターン]
 level: [basic, practice, advanced]

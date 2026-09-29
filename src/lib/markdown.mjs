@@ -230,7 +230,7 @@ function renderFence(code, lang, { title, caption, marks }) {
     .join(""); // .line は block 表示なので改行文字を挟まない（挟むと空行が出る）
 
   const label = LANG_LABELS[lang] || lang;
-  const head = `<div class="code-head">${title ? `<span class="code-title">${escapeHtml(title)}</span>` : ""}<span class="code-lang">${escapeHtml(label)}</span><button class="code-copy" type="button" aria-label="コードをコピー">コピー</button></div>`;
+  const head = `<div class="code-head">${title ? `<span class="code-title">${escapeHtml(title)}</span>` : ""}<span class="code-lang">${escapeHtml(label)}</span><button class="code-wrap" type="button" aria-pressed="false" title="長い行を折り返して表示する">折り返し</button><button class="code-copy" type="button" aria-label="コードをコピー">コピー</button></div>`;
   const cap = caption ? `<div class="code-caption">${inline(caption)}</div>` : "";
   return `<div class="code-block" data-lang="${escapeHtml(lang)}">${head}<pre><code>${body}</code></pre>${cap}</div>`;
 }

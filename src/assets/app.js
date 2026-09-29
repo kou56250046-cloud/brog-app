@@ -36,6 +36,24 @@
     if (input) { e.preventDefault(); input.focus(); }
   });
 
+  /* ---------- コードの折り返し ---------- */
+
+  // 長い日本語コメントを横スクロールせずに読めるよう、狭い画面では最初から折り返す
+  function setWrap(block, on) {
+    block.classList.toggle("wrap", on);
+    var btn = block.querySelector(".code-wrap");
+    if (btn) btn.setAttribute("aria-pressed", String(on));
+  }
+  var narrow = window.matchMedia("(max-width: 640px)").matches;
+  Array.prototype.forEach.call(document.querySelectorAll(".code-block"), function (b) { setWrap(b, narrow); });
+
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest(".code-wrap");
+    if (!btn) return;
+    var block = btn.closest(".code-block");
+    setWrap(block, !block.classList.contains("wrap"));
+  });
+
   /* ---------- コードのコピー ---------- */
 
   function copyText(text) {

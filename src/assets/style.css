@@ -380,18 +380,24 @@ kbd {
 .code-title { color: var(--code-ink); font-family: var(--font-mono); }
 .code-lang { margin-right: auto; }
 .code-title + .code-lang { opacity: 0.8; }
-.code-copy {
+.code-copy, .code-wrap {
   min-height: 36px; padding: 3px 14px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 4px;
   background: transparent; color: var(--code-muted); font: inherit; cursor: pointer;
 }
-.code-copy:hover { color: var(--code-ink); border-color: rgba(255, 255, 255, 0.35); }
+.code-copy:hover, .code-wrap:hover { color: var(--code-ink); border-color: rgba(255, 255, 255, 0.35); }
 .code-copy.done { color: var(--tok-s); border-color: var(--tok-s); }
+.code-wrap[aria-pressed="true"] { color: var(--code-ink); border-color: rgba(255, 255, 255, 0.45); background: rgba(255, 255, 255, 0.08); }
 .code-block pre { margin: 0; padding: 14px 0; overflow-x: auto; }
 .code-block code {
   display: block; min-width: max-content; font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.7;
   color: var(--code-ink); tab-size: 4;
 }
-.code-block .line { display: block; padding: 0 20px; min-height: 1.7em; }
+.code-block { --code-pad: 20px; }
+.code-block .line { display: block; padding: 0 var(--code-pad); min-height: 1.7em; }
+/* 折り返し表示: 長いコメントを横スクロールせずに読める。
+   折り返した続きの行は 4 字ぶん右にずらし、新しい行と見分けられるようにする */
+.code-block.wrap code { min-width: 0; }
+.code-block.wrap .line { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: calc(var(--code-pad) + 4ch); text-indent: -4ch; }
 .code-block .line.hl { background: var(--code-line-hl); box-shadow: inset 3px 0 0 var(--marker); }
 .code-block .line.add { background: rgba(120, 200, 120, 0.12); }
 .code-block .line.del { background: rgba(230, 100, 100, 0.12); }
@@ -500,7 +506,7 @@ kbd {
   .spec > div:last-child { border-bottom: 0; }
   .prose { font-size: 1rem; }
   .prose h2 { font-size: 1.35rem; }
-  .code-block .line { padding: 0 14px; }
+  .code-block { --code-pad: 14px; }
   .figure-scroll { padding: 12px; }
   .pager { grid-template-columns: 1fr; }
 }

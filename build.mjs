@@ -280,3 +280,7 @@ const kb = (byteCount / 1024).toFixed(0);
 console.log(`ビルド完了  ${Date.now() - t0}ms`);
 console.log(`  記事 ${data.stats.articleCount} 本 / カテゴリー ${data.stats.categoryCount} / タグ ${data.stats.tagCount}`);
 console.log(`  出力 ${fileCount} ファイル・${kb} KB → dist/`);
+if (data.warnings.length) {
+  console.log(`\n原稿の警告 ${data.warnings.length} 件（ビルドは完了しています）`);
+  for (const w of data.warnings) console.log(`  - ${w}`);
+}

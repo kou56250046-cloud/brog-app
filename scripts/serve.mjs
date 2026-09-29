@@ -32,6 +32,9 @@ function build(label) {
   const r = spawnSync(process.execPath, ["build.mjs"], { cwd: ROOT, encoding: "utf8" });
   if (r.status === 0) {
     process.stdout.write(`[${label}] ビルド OK (${Date.now() - t}ms)\n`);
+    // 原稿の警告は保存のたびに見えないと直されないので、自動ビルドでも出す
+    const warn = r.stdout.indexOf("原稿の警告");
+    if (warn !== -1) process.stdout.write(r.stdout.slice(warn));
   } else {
     process.stdout.write(`[${label}] ビルド失敗\n${r.stderr || r.stdout}\n`);
   }

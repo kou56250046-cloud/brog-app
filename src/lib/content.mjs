@@ -33,7 +33,26 @@ function measure(content) {
   return { chars: text.length, codeLines, minutes: Math.max(1, Math.round(minutes)) };
 }
 
-function loadArticles() {
+const STATUSES = ["published", "draft"];
+
+/**
+ * ビルドは通るが、書き手が気づかないまま見た目や分類がずれる書き方を拾う。
+ * 止めるほどではないので警告として返す（止めるべきものは loadArticles / assertUniqueSlugs が例外にする）
+ */
+function lint(slug, data, warn) {
+  const w = (msg) => warn.push(`${slug}.md: ${msg}`);
+  if (!STATUSES.includes(String(data.status ?? "draft"))) {
+    w(`status "${data.status}" は published / draft のどちらでもないため、下書き扱いで出力されません`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/.test(slug)) w("ファイル名は YYYY-MM-DD-英小文字とハイフン.md にしてください");
+  if (!data.title) w("title がありません（ファイル名がタイトルになります）");
+  if (!data.description) w("description がありません（一覧と検索に説明が出ません）");
+  const badLevels = toArray(data.level).filter((l) => !LEVELS[l]);
+  if (badLevels.length) w(`level の ${badLevels.join(", ")} は無視されます（basic / practice / advanced）`);
+  if (!data.verified) w("verified（情報の確認日）がありません");
+}
+
+function loadArticles(warn) {
   if (!fs.existsSync(ARTICLES_DIR)) return [];
   return fs
     .readdirSync(ARTICLES_DIR)
@@ -41,6 +60,7 @@ function loadArticles() {
     .map((f) => {
       const slug = f.replace(/\.md$/, "");
       const { data, content } = parseFrontmatter(fs.readFileSync(path.join(ARTICLES_DIR, f), "utf8"));
+      if (String(data.status ?? "draft") !== "draft") lint(slug, data, warn);
       const levels = toArray(data.level).filter((l) => LEVELS[l]);
       return {
         slug,
@@ -101,8 +121,14 @@ function assertUniqueSlugs(kind, items, articles, pick) {
 
 /** サイト全体のデータを一度だけ組み立てる */
 export function loadSite(site) {
-  const articles = loadArticles();
+  const warnings = [];
+  const articles = loadArticles(warnings);
   const catMeta = site.categories ?? {};
+
+  // site.config.mjs に無いカテゴリーは色・説明・読める URL が付かない
+  for (const a of articles) {
+    if (!catMeta[a.category]) warnings.push(`${a.slug}.md: カテゴリー「${a.category}」が site.config.mjs の categories にありません`);
+  }
 
   const categories = countBy(articles, (a) => a.category).map(([name, count]) => {
     const meta = catMeta[name] ?? {};
@@ -126,6 +152,16 @@ export function loadSite(site) {
   assertUniqueSlugs("カテゴリー", categories, articles, (a) => [a.category]);
   assertUniqueSlugs("タグ", tags, articles, (a) => a.tags);
 
+  // 「Claude API」「ClaudeAPI」「claude-api」のような、ページは分かれるが同じ意味らしいタグ
+  const loose = new Map();
+  for (const t of tags) {
+    const key = t.name.toLowerCase().replace(/[\s\-_.・]/g, "");
+    loose.set(key, [...(loose.get(key) ?? []), t.name]);
+  }
+  for (const names of loose.values()) {
+    if (names.length > 1) warnings.push(`タグの表記が近いものがあります: ${names.map((n) => `「${n}」`).join(" ")}`);
+  }
+
   const catByName = new Map(categories.map((c) => [c.name, c]));
   const tagByName = new Map(tags.map((t) => [t.name, t]));
 
@@ -133,6 +169,7 @@ export function loadSite(site) {
 
   return {
     articles,
+    warnings,
     categories,
     tags,
     catByName,

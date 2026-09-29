@@ -51,7 +51,8 @@ function loadArticles() {
         updated: data.updated ? String(data.updated) : "",
         /** 記事中の事実（仕様・数値・モデル名）を最後に確かめた日 */
         verified: data.verified ? String(data.verified) : "",
-        category: String(data.category ?? "未分類"),
+        // `category:` を空で書くとパーサは [] を返すので、空は「未分類」に揃える
+        category: toArray(data.category)[0] || "未分類",
         tags: toArray(data.tags),
         levels: levels.length ? levels : ["basic"],
         series: data.series ? String(data.series) : "",
@@ -61,6 +62,13 @@ function loadArticles() {
       };
     })
     .filter((a) => a.status === "published")
+    .map((a) => {
+      // 日付が無い・形式違いだと並び順が狂い、RSS に "Invalid Date" が出る。公開前に止める
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(a.date) || Number.isNaN(Date.parse(a.date))) {
+        throw new Error(`${a.slug}.md: date が YYYY-MM-DD 形式ではありません（"${a.date}"）`);
+      }
+      return a;
+    })
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.slug < b.slug ? 1 : -1));
 }
 
@@ -72,6 +80,23 @@ function countBy(items, pick) {
     }
   }
   return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"));
+}
+
+/**
+ * 「LLM」と「llm」のように、別の名前が同じファイル名になると一方の一覧ページが上書きされる。
+ * 黙って壊れないよう、どの記事がどちらの表記を使っているかを示してビルドを止める
+ */
+function assertUniqueSlugs(kind, items, articles, pick) {
+  const bySlug = new Map();
+  for (const it of items) bySlug.set(it.slug, [...(bySlug.get(it.slug) ?? []), it.name]);
+  const clashes = [...bySlug.values()].filter((names) => names.length > 1);
+  if (!clashes.length) return;
+  const detail = clashes
+    .map((names) =>
+      names.map((n) => `  「${n}」: ${articles.filter((a) => pick(a).includes(n)).map((a) => a.slug).join(", ")}`).join("\n")
+    )
+    .join("\n");
+  throw new Error(`${kind}の表記が揺れていて、同じページに重なります。どちらかに揃えてください。\n${detail}`);
 }
 
 /** サイト全体のデータを一度だけ組み立てる */
@@ -97,6 +122,9 @@ export function loadSite(site) {
     slug: slugify(name),
     url: `tags/${slugify(name)}.html`,
   }));
+
+  assertUniqueSlugs("カテゴリー", categories, articles, (a) => [a.category]);
+  assertUniqueSlugs("タグ", tags, articles, (a) => a.tags);
 
   const catByName = new Map(categories.map((c) => [c.name, c]));
   const tagByName = new Map(tags.map((t) => [t.name, t]));

@@ -14,7 +14,11 @@ import { renderPage } from "./src/templates/layout.mjs";
 import * as P from "./src/templates/pages.mjs";
 
 const ROOT = process.cwd();
-const DIST = path.join(ROOT, "dist");
+const OUT = path.join(ROOT, "dist");
+// いったんプロセスごとの一時フォルダに書き、最後に dist/ と差し替える。
+// 開発サーバーの自動ビルドと手動ビルドが重なっても、互いの出力を途中で消さない
+const DIST = path.join(ROOT, `.dist-tmp-${process.pid}`);
+process.on("exit", () => fs.rmSync(DIST, { recursive: true, force: true }));
 const V = String(Date.now()).slice(-8); // アセットのキャッシュバスター
 /** layout.mjs が ?v=V を付けて参照するファイル */
 const VERSIONED = new Set(["assets/style.css", "assets/app.js", "search-index.js"]);
@@ -230,6 +234,17 @@ write("manifest.webmanifest", JSON.stringify({
 copyDir(path.join(ROOT, "public"), DIST);
 copyDir(path.join(ROOT, "src", "assets"), path.join(DIST, "assets"));
 
+// ダークの色は style.css の dark:start〜dark:end に 1 回だけ書き、手動切替用（dark:copy）へここで複製する。
+// 2 か所に手で書くと、片方だけ直したときに「OS がダーク」と「手動でダーク」で色が食い違う
+{
+  const cssPath = path.join(DIST, "assets", "style.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+  const tokens = css.match(/\/\* dark:start[^*]*\*\/([\s\S]*?)\/\* dark:end \*\//);
+  const slot = /\/\* dark:copy[^*]*\*\//;
+  if (!tokens || !slot.test(css)) throw new Error("style.css に dark:start / dark:end / dark:copy の目印がありません");
+  fs.writeFileSync(cssPath, css.replace(slot, tokens[1].trim()));
+}
+
 // Service Worker はスコープをサイト全体にするためルート直下に置く。
 // 読む価値のあるファイルをすべて事前キャッシュし、オフラインでも全記事を読めるようにする
 const listFiles = (dir) =>
@@ -252,6 +267,12 @@ const sw = fs
   .replace("= __PRECACHE__;", `= ${JSON.stringify(precache)};`);
 write("sw.js", sw);
 fs.rmSync(path.join(DIST, "assets", "sw.js"), { force: true });
+
+/* ---------- 差し替え ---------- */
+
+// Windows では開発サーバーが読んでいる最中だと一瞬消せないことがあるので、数回やり直す
+fs.rmSync(OUT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+fs.renameSync(DIST, OUT);
 
 /* ---------- 結果表示 ---------- */
 

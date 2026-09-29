@@ -51,6 +51,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    /* dark:start — ダークの色はここだけに書く。下の手動切替用へはビルドが複製する */
     --paper: #14181f;
     --surface: #1b2029;
     --sunken: #11151b;
@@ -71,29 +72,11 @@
     --warning: #e3a453;
     --caution: #f08a80;
     color-scheme: dark;
+    /* dark:end */
   }
 }
 :root[data-theme="dark"] {
-  --paper: #14181f;
-  --surface: #1b2029;
-  --sunken: #11151b;
-  --ink: #e3e6ea;
-  --ink-2: #c3c9d2;
-  --muted: #97a0ad;
-  --line: #2b313c;
-  --line-strong: #3a4250;
-  --accent: #8c9aff;
-  --accent-ink: #aab4ff;
-  --accent-soft: #232a4a;
-  --marker: #f0b45a;
-  --marker-soft: rgba(240, 180, 90, 0.18);
-  --code-bg: #0f1218;
-  --note: #8c9aff;
-  --tip: #5cc4b2;
-  --important: #c39bf0;
-  --warning: #e3a453;
-  --caution: #f08a80;
-  color-scheme: dark;
+  /* dark:copy — ビルド時に上の dark:start〜dark:end がここへ入る。直接書かない */
 }
 
 /* ---------- 基本 ---------- */

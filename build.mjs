@@ -16,6 +16,8 @@ import * as P from "./src/templates/pages.mjs";
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const V = String(Date.now()).slice(-8); // アセットのキャッシュバスター
+/** layout.mjs が ?v=V を付けて参照するファイル */
+const VERSIONED = new Set(["assets/style.css", "assets/app.js", "search-index.js"]);
 
 const t0 = Date.now();
 let fileCount = 0;
@@ -240,6 +242,8 @@ const precache = [
     .map((f) => path.relative(DIST, f).split(path.sep).join("/"))
     .filter((f) => /\.(html|css|js|svg|png|webmanifest)$/.test(f))
     .filter((f) => !["404.html", "assets/sw.js"].includes(f))
+    // HTML が ?v= 付きで参照するファイルは、同じ URL で保存しておく（SW は完全一致で返す）
+    .map((f) => (VERSIONED.has(f) ? `${f}?v=${V}` : f))
     .sort(),
 ];
 const sw = fs

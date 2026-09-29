@@ -47,18 +47,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // アセットは ?v= が付くので、クエリを無視して保存済みのものを返す
+  // アセットは ?v=<ビルド番号> まで含めて完全一致で返す。
+  // クエリを無視すると、デプロイ直後に新しい HTML と古い CSS/JS が組み合わさって壊れる。
+  // 一致しなければ取りに行き、オフラインのときだけ版違いでも手元の物を使う
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(
+    caches.match(req).then(
       (hit) =>
         hit ||
-        fetch(req).then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
+        fetch(req)
+          .then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE).then((cache) => cache.put(req, copy));
+            }
+            return res;
+          })
+          .catch(() => caches.match(req, { ignoreSearch: true }))
     )
   );
 });

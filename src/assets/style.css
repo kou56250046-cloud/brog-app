@@ -83,7 +83,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h) + 16px); }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h) + 16px); } /* 見出しへのジャンプ位置はここだけで決める（見出し側に scroll-margin を足すと二重になり、目次の現在地が 1 つ前にずれる） */
 
 body {
   margin: 0;
@@ -164,7 +164,9 @@ kbd {
 .theme-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
 .progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 30; }
-.progress span { display: block; height: 100%; width: 0; background: var(--marker); }
+.progress span { display: block; height: 100%; width: 100%; background: var(--marker); transform: scaleX(0); transform-origin: left; }
+/* 章（h2）の位置の目盛り */
+.progress i { position: absolute; top: 0; width: 2px; height: 100%; margin-left: -1px; background: var(--ink-2); opacity: 0.45; }
 
 /* ---------- トップ ---------- */
 
@@ -306,7 +308,7 @@ kbd {
 .prose { font-size: 1.02rem; line-height: 1.95; padding-bottom: 40px; }
 .prose > * + * { margin-top: 1.25em; }
 .prose p { margin: 1.1em 0 0; }
-.prose h2, .prose h3, .prose h4 { position: relative; line-height: 1.45; scroll-margin-top: calc(var(--header-h) + 16px); }
+.prose h2, .prose h3, .prose h4 { position: relative; line-height: 1.45; }
 .prose h2 {
   margin: 3.2em 0 0; padding-top: 1.1em; font-size: 1.55rem; font-weight: 800;
   border-top: 2px solid var(--ink);
@@ -342,6 +344,18 @@ kbd {
 .prose td:first-child { font-weight: 600; }
 
 /* コールアウト */
+/* 続きから読む */
+.resume {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 1.5em;
+  padding: 10px 10px 10px 16px; border: 1px solid var(--line-strong); border-left: 4px solid var(--marker);
+  border-radius: var(--radius); background: var(--surface); font-size: 0.92rem; line-height: 1.6;
+}
+.resume p { margin: 0; flex: 1 1 16em; }
+.resume button { min-height: 40px; border-radius: var(--radius); font: inherit; cursor: pointer; }
+.resume-go { padding: 0 16px; border: 0; background: var(--ink); color: var(--paper); font-weight: 700; }
+.resume-close { width: 40px; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); }
+.prose > .resume + * { margin-top: 0; }
+
 .callout {
   --c: var(--note);
   padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line));

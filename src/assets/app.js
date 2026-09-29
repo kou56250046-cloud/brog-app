@@ -86,7 +86,8 @@
       var rect = prose.getBoundingClientRect();
       var total = rect.height - window.innerHeight;
       var p = total > 0 ? Math.min(1, Math.max(0, -rect.top / total)) : 1;
-      bar.style.width = (p * 100).toFixed(2) + "%";
+      // width ではなく transform で伸ばす（レイアウトを伴わず合成だけで描ける）
+      bar.style.transform = "scaleX(" + p.toFixed(4) + ")";
     }
     if (heads.length) {
       var line = 120;
@@ -96,8 +97,86 @@
         else break;
       }
       tocLinks.forEach(function (a) { a.classList.toggle("active", a.dataset.id === current.id); });
+      rememberPosition(heads.indexOf(current), current, p);
     }
   }
+
+  /* ---------- 続きから読む ---------- */
+
+  // 最後に読んでいた章をこの端末に覚えておき、次に開いたとき冒頭に「続きから読む」を出す
+  var resumeKey = "devkb:resume:" + location.pathname;
+  var lastSaved = "";
+
+  function rememberPosition(index, heading, p) {
+    try {
+      if (p !== undefined && p >= 0.98) {
+        // 読み終えたら忘れる（次に開いたときは頭から）
+        if (lastSaved !== "done") { localStorage.removeItem(resumeKey); lastSaved = "done"; }
+        return;
+      }
+      if (index <= 0 || heading.id === lastSaved) return; // 最初の章にいる間は保存しない
+      var link = tocLinks.filter(function (a) { return a.dataset.id === heading.id; })[0];
+      localStorage.setItem(resumeKey, JSON.stringify({ id: heading.id, text: link ? link.textContent : heading.textContent }));
+      lastSaved = heading.id;
+    } catch (e) { /* 保存できない環境では何もしない */ }
+  }
+
+  function offerResume() {
+    if (!prose || !heads.length || location.hash || window.scrollY > 200) return;
+    var saved;
+    try { saved = JSON.parse(localStorage.getItem(resumeKey) || "null"); } catch (e) { return; }
+    var target = saved && document.getElementById(saved.id);
+    if (!target || heads.indexOf(target) <= 0) return;
+
+    var box = document.createElement("div");
+    box.className = "resume";
+    box.setAttribute("role", "region");
+    box.setAttribute("aria-label", "続きから読む");
+    var label = document.createElement("p");
+    label.textContent = "前回は「" + saved.text + "」まで読みました";
+    var go = document.createElement("button");
+    go.type = "button";
+    go.className = "resume-go";
+    go.textContent = "続きから読む";
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "resume-close";
+    close.setAttribute("aria-label", "閉じる");
+    close.textContent = "×";
+    go.addEventListener("click", function () {
+      box.parentNode.removeChild(box);
+      target.scrollIntoView();
+      history.replaceState(null, "", "#" + encodeURIComponent(saved.id));
+    });
+    close.addEventListener("click", function () { box.parentNode.removeChild(box); });
+    box.appendChild(label);
+    box.appendChild(go);
+    box.appendChild(close);
+    prose.insertBefore(box, prose.firstChild);
+  }
+  offerResume();
+  // 読了バーに章（h2）の位置の目盛りを付ける。35 分の記事でいまどの章の辺りかが分かる
+  function placeTicks() {
+    if (!bar || !prose) return;
+    var track = bar.parentNode;
+    Array.prototype.forEach.call(track.querySelectorAll("i"), function (t) { track.removeChild(t); });
+    var top = prose.getBoundingClientRect().top;
+    var total = prose.getBoundingClientRect().height - window.innerHeight;
+    if (total <= 0) return;
+    Array.prototype.forEach.call(prose.querySelectorAll("h2"), function (h) {
+      var at = (h.getBoundingClientRect().top - top) / total;
+      if (at <= 0 || at >= 1) return;
+      var tick = document.createElement("i");
+      tick.style.left = (at * 100).toFixed(2) + "%";
+      track.appendChild(tick);
+    });
+  }
+  if (bar) {
+    placeTicks();
+    var resizeTimer;
+    window.addEventListener("resize", function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(placeTicks, 150); });
+  }
+
   if (bar || heads.length) {
     var ticking = false;
     window.addEventListener("scroll", function () {

@@ -1,0 +1,8 @@
+# ビルド出力（GitHub Actions で生成する）
+/dist
+
+/node_modules
+.DS_Store
+*.log
+.env*
+/.playwright-mcp

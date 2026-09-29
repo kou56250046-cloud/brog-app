@@ -1,0 +1,12 @@
+{
+  "name": "brog-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "技術ナレッジブログ — 依存ゼロの静的サイトジェネレーター",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "check": "node scripts/check-code.mjs"
+  }
+}

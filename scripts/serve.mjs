@@ -38,14 +38,20 @@ function build(label) {
 }
 
 function resolve(urlPath) {
-  const pathname = decodeURIComponent(urlPath.split("?")[0]);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(urlPath.split("?")[0]);
+  } catch {
+    return null; // 壊れたエンコード（%E0%A4%A など）は 404 にする。例外でサーバーを落とさない
+  }
   if (!pathname.startsWith(BASE)) return null;
   const clean = "/" + pathname.slice(BASE.length);
   const candidates = [clean, `${clean}.html`, path.posix.join(clean, "index.html")];
   if (clean === "/") candidates.unshift("/index.html");
   for (const c of candidates) {
     const file = path.join(DIST, c);
-    if (file.startsWith(DIST) && fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+    // DIST + 区切り文字で判定する（DIST だけだと隣の dist2/ なども通ってしまう）
+    if (file.startsWith(DIST + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) return file;
   }
   return null;
 }

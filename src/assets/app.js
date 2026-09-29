@@ -182,7 +182,11 @@
     for (var i = 0; i < terms.length && at === -1; i++) at = item.bl.indexOf(terms[i]);
     if (at === -1) return "";
     var start = Math.max(0, at - 40);
-    return (start > 0 ? "…" : "") + item.b.slice(start, at + 80) + "…";
+    var end = Math.min(item.b.length, at + 80);
+    // 絵文字などサロゲートペアの途中で切ると文字化けするので、切れ目を 1 つずらす
+    if (/[\uDC00-\uDFFF]/.test(item.b.charAt(start))) start++;
+    if (/[\uD800-\uDBFF]/.test(item.b.charAt(end - 1))) end--;
+    return (start > 0 ? "…" : "") + item.b.slice(start, end) + (end < item.b.length ? "…" : "");
   }
 
   function apply() {

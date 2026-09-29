@@ -37,8 +37,10 @@ for (const file of targets) {
     i++;
     while (i < lines.length && lines[i].trim() !== open[1]) body.push(lines[i++]);
     total++;
+    // リスト項目内のコードは項目の字下げが付いているので、共通の字下げを外してから確かめる
+    const indent = Math.min(...body.filter((l) => l.trim()).map((l) => l.match(/^\s*/)[0].length), Infinity);
     const src = path.join(tmp, `block_${total}.py`);
-    fs.writeFileSync(src, body.join("\n") + "\n");
+    fs.writeFileSync(src, body.map((l) => l.slice(Number.isFinite(indent) ? indent : 0)).join("\n") + "\n");
     const r = spawnSync(python, ["-m", "py_compile", src], { encoding: "utf8" });
     if (r.status !== 0) {
       failed++;

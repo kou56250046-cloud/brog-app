@@ -15,7 +15,9 @@ function coerce(v) {
   if (s.startsWith("[") && s.endsWith("]")) {
     const inner = s.slice(1, -1).trim();
     if (!inner) return [];
-    return inner.split(",").map((x) => unquote(x)).filter(Boolean);
+    // クォートの内側のカンマでは区切らない（["a, b", c] → ["a, b", "c"]）
+    const parts = inner.match(/"[^"]*"|'[^']*'|[^,]+/g) ?? [];
+    return parts.map((x) => unquote(x)).filter(Boolean);
   }
   if (s === "true") return true;
   if (s === "false") return false;

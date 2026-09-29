@@ -26,26 +26,34 @@ function inline(src) {
 
   s = escapeHtml(s);
 
+  // URL の中の括弧は 1 段まで対応する（Wikipedia の Foo_(bar) など）
+  const URL_IN_PARENS = String.raw`((?:[^()\s]|\([^()\s]*\))+)`;
+
   s = s.replace(
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+    new RegExp(String.raw`!\[([^\]]*)\]\(${URL_IN_PARENS}(?:\s+&quot;([^&]*)&quot;)?\)`, "g"),
     (_, alt, url, title) =>
       `<img src="${url}" alt="${alt}"${title ? ` title="${title}"` : ""} loading="lazy" />`
   );
 
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g, (_, text, href, title) => {
+  s = s.replace(new RegExp(String.raw`\[([^\]]+)\]\(${URL_IN_PARENS}(?:\s+&quot;([^&]*)&quot;)?\)`, "g"), (_, text, href, title) => {
     const ext = /^https?:\/\//.test(href) ? ' target="_blank" rel="noopener noreferrer"' : "";
     return `<a href="${href}"${title ? ` title="${title}"` : ""}${ext}>${text}</a>`;
   });
 
   s = s.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  // 開きの * の直後と閉じの * の直前が空白でないときだけ斜体にする（`a * b * c` の掛け算を壊さない）
+  s = s.replace(/(^|[^*\w])\*([^*\s](?:[^*\n]*[^*\s])?)\*/g, "$1<em>$2</em>");
   s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
 
-  // まだリンク化されていない裸の URL
+  // まだリンク化されていない裸の URL。
+  // 日本語の文中に書くので、全角の句読点・括弧の直後でも拾い、全角文字の手前で止める。末尾の . , などは文の句読点として外す
   s = s.replace(
-    /(^|[\s(])(https?:\/\/[^\s<)"']+)/g,
-    (_, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+    /(^|[\s(　-〿！-｠])(https?:\/\/[^\s<)"'　-鿿＀-￯]+)/g,
+    (_, pre, raw) => {
+      const url = raw.replace(/[.,;:!?]+$/, "");
+      return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${raw.slice(url.length)}`;
+    }
   );
 
   s = s.replace(
@@ -66,13 +74,20 @@ function renderList(buf, ctx) {
   const base = indentOf(first);
   const ordered = isOLItem(first);
   const items = [];
+  let contentCol = base + 2; // 項目の本文が始まる列（記号と直後の空白を含めた幅）
+  let inFence = null;
 
   for (const line of buf) {
-    if (isItem(line) && indentOf(line) <= base) {
-      items.push([line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")]);
+    const f = line.match(/^\s*(```+|~~~+)/);
+    if (!inFence && isItem(line) && indentOf(line) <= base) {
+      const marker = line.match(/^\s*(?:[-*+]|\d+[.)])\s+/)[0];
+      contentCol = marker.length;
+      items.push([line.slice(marker.length)]);
     } else if (items.length) {
-      items[items.length - 1].push(line.slice(Math.min(indentOf(line), base + 2)));
+      // `10.` の項目なら 4 桁、`-` なら 2 桁というように、本文の列までだけ削る
+      items[items.length - 1].push(line.slice(Math.min(indentOf(line), contentCol)));
     }
+    if (f && items.length) inFence = inFence ? (line.trim() === inFence ? null : inFence) : f[1];
   }
 
   const lis = items.map((lines) => {
@@ -85,9 +100,18 @@ function renderList(buf, ctx) {
   return `<${tag}>\n${lis.join("\n")}\n</${tag}>`;
 }
 
+const PIPE = "\u0001"; // セル内の | を退避する記号（本文には出現しない制御文字）
+
 function renderTable(rows) {
+  // `string | null` のようなコード内の | と、\| で逃がした | では列を分けない
   const cells = (row) =>
-    row.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+    row
+      .replace(/`[^`]*`/g, (code) => code.replace(/\|/g, PIPE))
+      .replace(/\\\|/g, PIPE)
+      .replace(/^\s*\|/, "")
+      .replace(/\|\s*$/, "")
+      .split("|")
+      .map((c) => c.trim().replace(new RegExp(PIPE, "g"), "|"));
 
   const align = cells(rows[1]).map((c) => {
     if (/^:-+:$/.test(c)) return "center";
@@ -110,7 +134,9 @@ function renderTable(rows) {
   return `<div class="table-scroll"><table>\n<thead><tr>${th}</tr></thead>\n<tbody>\n${body.join("\n")}\n</tbody>\n</table></div>`;
 }
 
-const RAW_HTML = /^\s*<(div|details|figure|svg|aside|section|table|video)[\s>]/i;
+// 生 HTML として通す行。GFM と同じく、開きタグだけでなく閉じタグで始まる行も対象にする。
+// こうすると <details> と </details> の間に空行を挟んでも、中の Markdown を処理したうえで正しく閉じる
+const RAW_HTML = /^\s*<\/?(div|details|summary|figure|figcaption|svg|aside|section|table|video)[\s>]/i;
 
 /* ---------- 見出し ID ---------- */
 
@@ -250,12 +276,13 @@ function blocks(md, ctx) {
     }
 
     // 見出し
-    const h = line.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/);
+    // 閉じの # 列は前に空白があるときだけ外す（`## C#` の # は本文）
+    const h = line.match(/^\s*(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/);
     if (h) {
       const level = h[1].length;
       const text = h[2];
       const id = uniqueId(text, ctx);
-      ctx.headings.push({ level, id, text: text.replace(/[*`~]/g, "") });
+      ctx.headings.push({ level, id, text: text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*`~]/g, "") });
       out.push(
         `<h${level} id="${escapeHtml(id)}">${inline(text)}<a class="anchor" href="#${escapeHtml(encodeURIComponent(id))}" aria-label="この見出しへのリンク">#</a></h${level}>`
       );
@@ -288,18 +315,35 @@ function blocks(md, ctx) {
       const ordered = isOLItem(line);
       // 同種のリスト（番号付き／箇条書き）だけを 1 ブロックとして集める
       const sameList = (l) => isItem(l) && (indentOf(l) > base || isOLItem(l) === ordered);
+      // 項目の続き（字下げされた段落・コード）かどうか
+      const continues = (l) => l.trim() && indentOf(l) > base && !isItem(l);
       const buf = [];
+      let inFence = null; // 項目内で開いているフェンスの記号。閉じるまでは空行でも打ち切らない
       while (i < lines.length) {
         const l = lines[i];
-        if (sameList(l) || (buf.length && l.trim() && /^\s+\S/.test(l))) {
+        const f = l.match(/^\s*(```+|~~~+)/);
+        if (inFence) {
+          buf.push(l);
+          if (l.trim() === inFence) inFence = null;
+          i++;
+          continue;
+        }
+        if (sameList(l) || (buf.length && continues(l))) {
+          if (f && buf.length) inFence = f[1];
           buf.push(l);
           i++;
           continue;
         }
-        if (!l.trim() && sameList(lines[i + 1] || "")) {
-          buf.push("");
-          i++;
-          continue;
+        if (!l.trim()) {
+          // 空行の先が同じリストの項目か、項目の続きなら、リストはまだ終わっていない
+          let j = i + 1;
+          while (j < lines.length && !lines[j].trim()) j++;
+          const next = lines[j] || "";
+          if (sameList(next) || continues(next)) {
+            buf.push("");
+            i++;
+            continue;
+          }
         }
         break;
       }
@@ -322,6 +366,8 @@ function blocks(md, ctx) {
     if (para.length) {
       out.push(`<p>${inline(para.join("\n")).replace(/\n/g, "<br />\n")}</p>`);
     } else {
+      // どのブロックにも当たらなかった行（区切り行の無い「| 注:」など）は、捨てずに段落として出す
+      out.push(`<p>${inline(lines[i])}</p>`);
       i++;
     }
   }
@@ -346,11 +392,14 @@ export function stripMarkdown(md) {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/gi, "")
-    .replace(/^\s*\|.*$/gm, " ")
+    // 表は区切り行だけ捨て、セルの中身は検索対象に残す
+    .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, " ")
+    .replace(/\|/g, " ")
     .replace(/^\s*(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
     .replace(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/gm, "")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*_~`]/g, "")
+    // `_` は stop_reason のような識別子の一部なので残す
+    .replace(/[*~`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

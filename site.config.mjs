@@ -19,5 +19,6 @@ export default {
     "LLM・生成AI": { slug: "llm", color: "#7a3fb8", description: "モデルの性質、プロンプト、評価" },
     "設計・アーキテクチャ": { slug: "architecture", color: "#1f7a6d", description: "システムとコードの組み立て方" },
     開発ツール: { slug: "tools", color: "#b5651d", description: "エディタ・CLI・CI など日々の道具" },
+    機械学習: { slug: "machine-learning", color: "#b03a5b", description: "手法の仕組み・選び方・評価を、動くコードで" },
   },
 };

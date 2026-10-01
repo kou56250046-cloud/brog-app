@@ -17,6 +17,7 @@
 |---|---|
 | AIエージェント開発の基礎から発展まで | 2026-09-29-ai-agent-design-fundamentals |
 | AIエージェント向けのデータ設計（連載 3 回） | 2026-09-29-ai-agent-data-design-1-structured / -2-rag / -3-governance |
+| Python で作って動かす AI エージェント（連載 3 回: 入門・実践・発展） | 2026-10-01-agent-handson-1-basics / -2-practice / -3-advanced |
 | AIエージェントの構成要素 16 部品と 3 段階（連載 6 回） | 2026-09-29-agent-parts-1-map / -2-planning-state / -3-memory-rag / -4-errors-logs / -5-guardrails / -6-multi-agent |
 | レビューエージェントの設計思想（連載 3 回） | 2026-09-29-review-agent-1-verification / -2-findings / -3-architecture |
 | 機械学習の基礎と使いどころ（連載 8 回: 評価指標・過学習と正則化・決定木・アンサンブル・勾配降下法・深層学習・クラスタリング・次元削減） | 2026-09-30-ml-basics-1-metrics / -2-overfitting / -3-decision-tree / -4-ensemble / -5-gradient-descent / -6-deep-learning / -7-clustering / -8-dimensionality-reduction |

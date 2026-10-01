@@ -396,6 +396,8 @@ kbd {
 .code-block .line { display: block; padding: 0 var(--code-pad); min-height: 1.7em; }
 /* 折り返し表示: 長いコメントを横スクロールせずに読める。
    折り返した続きの行は 4 字ぶん右にずらし、新しい行と見分けられるようにする */
+/* 状態クラス wrap はページの器 .wrap と同名なので、器の余白と最大幅を打ち消す */
+.code-block.wrap { max-width: none; padding: 0; }
 .code-block.wrap code { min-width: 0; }
 .code-block.wrap .line { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: calc(var(--code-pad) + 4ch); text-indent: -4ch; }
 .code-block .line.hl { background: var(--code-line-hl); box-shadow: inset 3px 0 0 var(--marker); }

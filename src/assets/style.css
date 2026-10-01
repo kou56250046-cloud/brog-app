@@ -43,6 +43,8 @@
 
   --wrap: 1180px;
   --measure: 44rem;
+  --toc-w: 240px;
+  --toc-gap: 64px;
   --radius: 6px;
   --header-h: 56px;
 
@@ -250,7 +252,7 @@ kbd {
 /* ---------- 記事 ---------- */
 
 .post-head { padding-top: 48px; padding-bottom: 32px; }
-.post-head h1, .post-head .spec { max-width: calc(var(--measure) + 304px); }
+.post-head h1, .post-head .spec { max-width: calc(var(--measure) + var(--toc-gap) + var(--toc-w)); }
 .post-crumb { margin: 0 0 18px; font-size: 0.85rem; color: var(--muted); }
 .post-crumb a { color: var(--muted); }
 .post-crumb span { margin: 0 8px; }
@@ -290,7 +292,7 @@ kbd {
 .level-note { font-size: 0.85rem; color: var(--muted); }
 
 .post-layout {
-  display: grid; grid-template-columns: minmax(0, var(--measure)) 240px; justify-content: start; gap: 64px;
+  display: grid; grid-template-columns: minmax(0, var(--measure)) var(--toc-w); justify-content: start; gap: var(--toc-gap);
 }
 .post-aside { grid-column: 2; grid-row: 1; }
 .prose { grid-column: 1; grid-row: 1; min-width: 0; }
@@ -473,6 +475,15 @@ kbd {
 .site-footer a { color: var(--muted); }
 
 /* ---------- レスポンシブ ---------- */
+
+/* 広い画面ではコードブロックだけを目次の手前まで広げ、長い行の横スクロールを減らす。
+   本文は読みやすい幅のまま残す。器を広げるのは記事ページだけで、ヘッダー・フッターも同じ変数で揃う。
+   :has() 非対応のブラウザでは 3 行まとめて無効になり、従来の表示のまま残る */
+@media screen and (min-width: 1200px) {
+  body:has(.post) { --wrap: 1440px; }
+  body:has(.post) .post-layout { grid-template-columns: minmax(0, 1fr) var(--toc-w); }
+  body:has(.post) .prose > :not(.code-block) { max-width: var(--measure); }
+}
 
 @media (max-width: 1080px) {
   .post-layout { grid-template-columns: minmax(0, var(--measure)); gap: 0; }

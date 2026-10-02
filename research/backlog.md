@@ -21,3 +21,4 @@
 | AIエージェントの構成要素 16 部品と 3 段階（連載 6 回） | 2026-09-29-agent-parts-1-map / -2-planning-state / -3-memory-rag / -4-errors-logs / -5-guardrails / -6-multi-agent |
 | レビューエージェントの設計思想（連載 3 回） | 2026-09-29-review-agent-1-verification / -2-findings / -3-architecture |
 | 機械学習の基礎と使いどころ（連載 8 回: 評価指標・過学習と正則化・決定木・アンサンブル・勾配降下法・深層学習・クラスタリング・次元削減） | 2026-09-30-ml-basics-1-metrics / -2-overfitting / -3-decision-tree / -4-ensemble / -5-gradient-descent / -6-deep-learning / -7-clustering / -8-dimensionality-reduction |
+| データ設計の基礎（連載 6 回: 目的と粒度・エンティティとキー・正規化・マスターデータ・履歴と SCD・データ基盤の層） | 2026-10-02-data-design-1-purpose-grain / -2-entity-keys / -3-normalization / -4-master-data / -5-history-scd / -6-architecture |

@@ -20,5 +20,6 @@ export default {
     "設計・アーキテクチャ": { slug: "architecture", color: "#1f7a6d", description: "システムとコードの組み立て方" },
     開発ツール: { slug: "tools", color: "#b5651d", description: "エディタ・CLI・CI など日々の道具" },
     機械学習: { slug: "machine-learning", color: "#b03a5b", description: "手法の仕組み・選び方・評価を、動くコードで" },
+    データ設計: { slug: "data-design", color: "#2a6f97", description: "テーブル設計・データモデリング・データ基盤の組み立て方" },
   },
 };

@@ -9,6 +9,25 @@ level: [basic, practice]
 series: AIエージェントのデータ設計
 status: published
 ---
+```hero
+title AI はデータの意味を推測できない。目的から逆算して意味を付ける
+group purpose 目的（人が決める）
+  G([目的と行動]):::human
+end
+group data データ設計
+  GR[粒度を揃える\n1 行 = 何か]:::data
+  SEM[意味を定義\n単位・期間・定義]:::data:::hl
+  Q{品質の関所}:::code
+end
+group access 窓口
+  API([SQL・関数\n検索]):::code
+end
+G --> GR --> SEM --> Q --> API
+note GR 粒度を混ぜると、合計が黙って膨らむ
+note SEM 指標は 1 か所で定義する（セマンティックレイヤー）
+note Q 汚れたデータは、エージェントに渡す前に止める
+```
+
 
 人間の担当者は、怪しいデータを見ると手を止める。「年収 -1 円？入力ミスだろう」「この表の金額、税込みだっけ？」と気づいて、誰かに確かめる。AI エージェントは、そのデータをそのまま使って答えを出す。
 

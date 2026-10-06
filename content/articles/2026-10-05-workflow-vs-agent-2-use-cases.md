@@ -9,6 +9,23 @@ level: [practice]
 series: WorkflowとAIエージェントの使い分け
 status: published
 ---
+```hero
+title 定型は Workflow、道筋が毎回変わる調査はエージェント
+group wf Workflow の中の AI（定型レポート・請求書）
+  IN([入力]):::code --> AI(読む・書く\n分類する):::llm --> V{プログラムで\n検証}:::code:::hl --> OUT([出力]):::code
+  HC[人が確認]:::human
+end
+group ag エージェント（障害・不具合の調査）
+  INC([障害の発生]):::human --> INV(仮説を立てて\n調べ直す):::llm
+  TOOLS[ログ・メトリクス\nデプロイ履歴]:::data
+end
+V -.->|不合格| HC
+INV <--> TOOLS
+note V LLM が書いた数字は、集計結果と突き合わせて確かめる
+note INV 障害ごとに違う道筋をたどれるのが、エージェントの強み
+note TOOLS 型が見えてきた調査は、Workflow に戻して固定する
+```
+
 
 [第 1 回](2026-10-05-workflow-vs-agent-1-basics.html)では、Workflow とエージェントを分ける軸は「処理の流れを誰が決めるか」だと整理した。軸が分かっても、実際の業務を前にすると迷う。請求書処理は AI に読ませるのだからエージェントだろうか。障害調査の報告書づくりまでエージェントに任せるべきだろうか。
 

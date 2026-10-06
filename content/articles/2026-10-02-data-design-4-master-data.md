@@ -9,6 +9,28 @@ level: [practice]
 series: データ設計の基礎
 status: published
 ---
+```hero
+title 表記ゆれを 1 つのコードに揃え、唯一の正から配る
+group src 各システム
+  A[東京・Tokyo\n13・TKY]:::data
+  C1[同じ顧客が\nCRM と会計に]:::data
+end
+group mdm マスター管理
+  MAP[対応表で\nコードに揃える]:::code
+  MATCH{名寄せ\n同じ顧客?}:::human
+  SSOT[唯一の正\nマスター]:::data:::hl
+end
+group use 利用側
+  DIM([適合\nディメンション]):::code
+end
+A --> MAP --> SSOT
+C1 --> MATCH --> SSOT
+SSOT --> DIM
+note MAP 対応表に無い値は、止めて知らせる
+note MATCH 自動で統合してはいけないケースは、人が判断する
+note SSOT コードに意味を埋め込まず、使い回さず、消さない
+```
+
 
 地域別の売上を出したら、東京が 3 行に分かれた。店舗のレジは「東京」、EC は「13」、海外向けの仕組みは「Tokyo」と書いていたのだ。顧客数も、営業システムと EC で同じ人を別々に数えていたため、実際より多く出ていた。
 

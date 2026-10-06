@@ -9,6 +9,29 @@ level: [practice]
 series: Pythonで作って動かすAIエージェント
 status: published
 ---
+```hero
+title 本物の LLM につなぎ、壊れても追えるようにする
+group loop ループ
+  LP[loop.py]:::code --> TW[to_wire\n各社の形式へ]:::code:::hl
+  FW[from_wire\nReply に直す]:::code
+end
+group api LLM のサービス
+  API(LLM の API):::llm
+end
+group guard 守りと記録
+  FS[外のファイルは\n読ませない]:::code
+  LOG[1 行 JSON の\nログ]:::data
+end
+TW --> API
+API -->|JSON| FW
+FW -.->|Reply| LP
+LP -->|ツール| FS
+FW -.-> LOG
+note TW 各社の形式の違いは、窓口の中だけで吸収する
+note FS パスを正規化して、workspace の外を触らせない
+note LOG 1 回の依頼を最初から最後まで追えるログを残す
+```
+
 
 [第 1 回](2026-10-01-agent-handson-1-basics.html)では、偽の LLM で動くエージェントの骨格を作った。偽物は決まった規則でしか動かないので、本当に「自分で考えて道具を使う」かどうかは、本物の LLM につないで初めて分かる。
 

@@ -9,6 +9,23 @@ level: [practice, advanced]
 series: データ設計の基礎
 status: published
 ---
+```hero
+title 層ごとに責任を分け、関所を通ったものだけを公開する
+group raw 収集・保存
+  RAW[Raw\n届いたまま保存]:::data:::hl
+end
+group clean 整形
+  CL[型・名前・コード\nを揃える]:::code
+end
+group serve 業務モデル・提供
+  BM[業務モデル\n結合・履歴]:::data --> G{品質の関所}:::code --> MART([DWH・マート\nBI・ML・AI]):::data
+end
+RAW --> CL --> BM
+note RAW Raw を残しておけば、規則の誤りを後から直せる
+note CL 型・名前・コードを揃え、最新の 1 件に絞る
+note G 検査に通ったときだけ公開する
+```
+
 
 ダッシュボードの売上が、ある朝から急に増えた。調べると、EC のシステムがキャンセルの表記を `cancelled` から `canceled` に変えていた。集計は `cancelled` だけを除外していたので、キャンセルされた注文が売上に数えられていた。しかも、取り込みのたびに元のデータを加工して上書きしていたため、正しい数字に戻すための元データが残っていなかった。
 

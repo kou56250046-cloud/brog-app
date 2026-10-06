@@ -9,6 +9,28 @@ level: [basic, practice]
 series: AIエージェントの構成要素
 status: published
 ---
+```hero
+title 16 の部品は、困りごとが起きた順に 3 段階で足す
+group s1 段階① シンプル
+  U([ユーザー]):::human --> L(LLM\n判断する):::llm:::hl
+  L --> T[Tool\nTool 選択]:::code
+  L --> R[簡単な RAG]:::data
+end
+group s2 段階② 実用的
+  P[Planning\nState 管理]:::code
+  G[エラー処理\n権限・承認]:::code
+end
+group s3 段階③ 高度
+  MA(複数 Agent):::llm
+end
+L -.-> P
+L -.-> G
+G -.-> MA
+note L LLM は判断だけ。データには Tool を通して触れる
+note G 途中で失敗して困ってから、段階②の部品を足す
+note MA 複数 Agent は、1 体の文脈に収まらなくなってから
+```
+
 
 「AIエージェントを作りたい」と言っても、LLM に API をつないだだけのものから、何体もの AI が分担して働く仕組みまで、指している範囲は広い。どこまで作れば「業務で使える」のか分からないまま、フレームワークの機能一覧を眺めて迷うことも多い。
 

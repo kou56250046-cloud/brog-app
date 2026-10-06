@@ -9,6 +9,28 @@ level: [practice]
 series: AIエージェントの構成要素
 status: published
 ---
+```hero
+title 「覚える」と「調べる」は分けて取り出し、分けて渡す
+Q([質問]):::human
+group mem Memory（エージェントが書く）
+  M[この人の記憶]:::data
+end
+group doc RAG（人が書いた文書）
+  R[社内文書を検索]:::data
+end
+CTX(見出しを分けて\n文脈にまとめる):::code:::hl
+A(LLM が答える):::llm
+Q --> M
+Q --> R
+M --> CTX
+R --> CTX
+CTX --> A
+A -.->|仮に覚える| M
+note M 仮 → 確定の 2 段で保存し、期限で忘れさせる
+note R RAG は Tool にし、権限で絞ってから検索する
+note CTX Memory と検索結果は混ぜず、見出しを分けて渡す
+```
+
 
 「前にも言ったけど、レポートは箇条書きで」。人間の同僚なら一度で覚えることを、エージェントは会話が変わるたびに忘れる。かといって何でも覚えさせると、古くなった情報や一度きりの勘違いまで、事実のように使い始める。
 

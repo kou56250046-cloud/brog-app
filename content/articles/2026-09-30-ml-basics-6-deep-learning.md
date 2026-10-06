@@ -10,6 +10,27 @@ level: [basic, practice, advanced]
 series: 機械学習の基礎と使いどころ
 status: published
 ---
+```hero
+title 表データは木、画像と言語はニューラルネット
+D{データの種類}:::human:::hl
+group tab 表形式のデータ
+  TREE[木のアンサンブル]:::code
+end
+group nn ニューラルネット（足し算と折り曲げを積む）
+  CNN[CNN\n画像]:::code
+  TF[Transformer\n系列・言語]:::code
+  LOOP[順伝播→逆伝播\n→重みを更新]:::code
+end
+D --> TREE
+D --> CNN
+D --> TF
+CNN --> LOOP
+TF --> LOOP
+note D 判断軸はデータの種類と量。表なら木から始める
+note CNN 1 画素ずれても持ちこたえるのが CNN の強み
+note LOOP PyTorch の学習ループは、順伝播・逆伝播・更新の型
+```
+
 
 画像認識、音声認識、翻訳、そして大規模言語モデル。ここ 10 年あまりで機械学習が大きく伸びた分野の中心には、**深層学習**（ディープラーニング）がある。層を何段も重ねたニューラルネットを、大量のデータで学習させる手法だ。
 

@@ -9,6 +9,28 @@ level: [practice, advanced]
 series: AIエージェントの構成要素
 status: published
 ---
+```hero
+title AI に「やらせない」を、Tool の手前と中で何重にも守る
+group agent エージェント
+  L(LLM が\nTool を頼む):::llm
+end
+group gate 関所（プログラム）
+  P{人と AI の\n両方の権限?}:::code
+  A{承認が要る?}:::code
+  X[Tool を実行\n行の権限を確認]:::code:::hl
+end
+group human 人
+  H{人が判断}:::human
+end
+L --> P --> A
+A -->|いいえ| X
+A -->|はい| H
+H -->|承認| X
+note P 使える Tool は、人とエージェントの権限が重なる所だけ
+note H 危険な操作は止めて待ち、保存した引数で実行する
+note X 「自分の顧客だけ」は LLM でなく Tool の中で守る
+```
+
 
 エージェントに顧客データベースとメール送信を持たせた瞬間、便利さと同じだけの危険が生まれる。他の営業担当の顧客を読める、確認なしに顧客へメールを送れる、受信メールに紛れ込んだ指示で機密を外に送ってしまう。どれも LLM が「悪意を持った」わけではなく、**できてしまう作りになっていた**ことが原因だ。
 

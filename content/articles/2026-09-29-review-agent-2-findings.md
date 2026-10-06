@@ -9,6 +9,26 @@ level: [practice]
 series: レビューエージェントの設計
 status: published
 ---
+```hero
+title Severity（影響）と Confidence（根拠）を別々に決める
+C([検証済みの候補]):::code --> X{指摘しない\n条件?}:::code
+X -.->|該当| D([記録して出さない]):::muted
+group axis 2 つの軸
+  SV(Severity\n影響の大きさ):::llm
+  CF[Confidence\n確かめた範囲]:::code:::hl
+end
+K[4 つに仕分ける\n確実〜提案]:::code
+P([人に見せる]):::human
+X -->|残す| SV
+X --> CF
+SV --> K
+CF --> K
+K --> P
+note X 変更と無関係・仕様どおり・好みの問題は、先に落とす
+note CF 確信度は自己申告でなく、どこまで確かめたかで決める
+note K 決まった検査はツール、設計の問題は LLM に分担する
+```
+
 
 「重大」と書かれた指摘を開いてみたら、根拠は「一般的にはこう書く」だけだった。AI レビューでよく起きることだ。原因は、**影響の大きさ**と**根拠の強さ**を 1 つのラベルに混ぜていることにある。
 

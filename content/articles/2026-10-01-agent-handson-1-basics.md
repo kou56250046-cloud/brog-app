@@ -9,6 +9,26 @@ level: [basic]
 series: Pythonで作って動かすAIエージェント
 status: published
 ---
+```hero
+title LLM とツールの往復ループを、標準ライブラリだけで書く
+group core core.py（型の約束）
+  R[Message・Reply\nの型]:::data
+end
+group loop loop.py（ループ）
+  U([依頼]):::human --> L(LLM が次の\n一手を決める):::llm:::hl --> C{ツールを\n頼んだ?}:::code
+  C -->|いいえ| A([答えを返す]):::code
+end
+group tools registry.py（ツール）
+  T[ツールを実行]:::code
+end
+R -.-> L
+C -->|はい| T
+T -.->|結果を履歴へ| L
+note R どの LLM サービスでも同じ形で扱えるよう、型を決める
+note L 往復の上限を決め、止まらないループを防ぐ
+note T Python の関数 1 つから、ツールの説明書を自動で作る
+```
+
 
 AIエージェントの解説は多いが、フレームワークを入れて数行で動かす例が中心で、「中で何が起きているか」は見えにくい。この連載では、**Python の標準ライブラリだけ**で 1 つのリポジトリ `agent-lab/` を 3 回かけて育てる。`pip install` は一度もしない。
 

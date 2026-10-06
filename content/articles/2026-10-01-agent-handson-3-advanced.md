@@ -9,6 +9,31 @@ level: [advanced]
 series: Pythonで作って動かすAIエージェント
 status: published
 ---
+```hero
+title 長く・安全に・測りながら回すための部品を足す
+group loop ループ
+  L(LLM が\nツールを頼む):::llm
+  SUM[履歴を要約に\n畳む]:::code
+  AP{承認が要る?}:::code
+  X[実行する]:::code
+end
+group human 人
+  H{人が許可?}:::human:::hl
+end
+group sub 部下
+  SA(部下エージェント\n= ツール 1 つ):::llm
+end
+L --> AP
+AP -->|いいえ| X
+AP -->|はい| H
+H -->|許可| X
+H -.->|断り| L
+X -->|調べもの| SA
+note SUM ツールの依頼と結果の組を壊さずに、要約へ畳む
+note H 断られたら理由を返し、LLM に別の手を考えさせる
+note SA 部下は結論だけを返す。全体は pass@k と pass^k で測る
+```
+
 
 [第 2 回](2026-10-01-agent-handson-2-practice.html)で、エージェントは本物の LLM で動き、ログとテストで追えるようになった。ただ、このままでは長い作業を任せると履歴があふれる。ファイルの上書きも LLM の判断だけで実行してしまう。しかも「たまたまうまくいった」のか「毎回うまくいく」のかが分からない。
 

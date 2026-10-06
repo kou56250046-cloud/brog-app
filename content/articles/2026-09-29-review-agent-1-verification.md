@@ -9,6 +9,29 @@ level: [basic, practice]
 series: レビューエージェントの設計
 status: published
 ---
+```hero
+title レビューの指摘は仮説として持ち、証明できたものだけを出す
+group llm LLM が探す
+  H(仮説を立てる):::llm
+  TR(影響をたどり\n反証を探す):::llm
+end
+group code プログラムが確かめる
+  EV{根拠は実在?}:::code
+  SP{仕様に反する?}:::code:::hl
+end
+group out 出力
+  OUT([指摘として残す]):::human
+  DROP([出さない]):::muted
+end
+H --> EV
+EV -->|ある| TR --> SP
+EV -.->|ない| DROP
+SP -->|反する| OUT
+note EV 根拠が実在しない指摘は、プログラムで落とす
+note TR 変更箇所の外まで影響をたどり、「本当に問題か」を問い直す
+note SP 最後の判断基準は仕様に置く
+```
+
 
 AI にコードレビューをさせると、指摘の数はすぐに増える。ところが、しばらくすると誰も読まなくなる。20 件の指摘のうち本当に直すべきものが 2〜3 件しかなく、残りは勘違いや好みの押しつけだと分かってくるからだ。
 

@@ -214,7 +214,7 @@ kbd {
 /* 記事一覧の行 */
 .entries { border-top: 1px solid var(--line); }
 .entry {
-  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 20px;
+  display: grid; grid-template-columns: 96px minmax(0, 1fr) 120px; gap: 20px;
   padding: 22px 0; border-bottom: 1px solid var(--line);
 }
 .entry time { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); padding-top: 4px; }
@@ -447,6 +447,83 @@ kbd {
 .fl-elabel rect { fill: var(--paper); stroke: var(--line); }
 .fl-elabel text { font-size: 12px; fill: var(--ink-2); }
 
+/* 見出し画像（設計図ヒーロー。src/lib/hero.mjs）。SVG の色はすべてここで変数から塗る */
+.hero, .entry-thumb {
+  --cat: var(--accent);
+  /* 担い手の色。コールアウトの色と同じ値から始めるが、図の側だけ変えられるよう別名にしておく */
+  --hero-code: var(--note);
+  --hero-llm: var(--important);
+  --hero-human: var(--warning);
+  --hero-data: var(--tip);
+}
+.hero {
+  margin: 28px 0 0; padding: 20px;
+  max-width: calc(var(--measure) + var(--toc-gap) + var(--toc-w));
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.hero-title { display: block; margin: 0 0 10px; font-size: clamp(1.25rem, 2.6vw, 1.7rem); font-weight: 800; line-height: 1.45; text-wrap: balance; }
+.hero-art { display: flex; justify-content: flex-start; margin-top: 14px; }
+.hero-svg { display: block; width: 100%; max-width: var(--w); height: auto; font-family: var(--font-sans); }
+.hero-svg text { fill: var(--ink); font-size: 15px; }
+.hero-band { fill: var(--sunken); stroke: var(--line-strong); }
+.hero-svg .hero-lane { font-size: 14px; font-weight: 700; fill: var(--ink-2); }
+.hero-shape { fill: var(--surface); stroke: var(--role, var(--ink-2)); stroke-width: 1.5; }
+/* 担い手の薄い面。color-mix が無いブラウザでは面を塗らず、枠と印だけで示す */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .hero-code .hero-shape, .hero-llm .hero-shape, .hero-human .hero-shape, .hero-data .hero-shape {
+    fill: color-mix(in srgb, var(--role) 12%, var(--surface));
+  }
+}
+.hero-glyph { fill: var(--role); }
+.hero-hl .hero-shape { stroke: var(--role, var(--cat)); stroke-width: 3; }
+.hero-muted .hero-shape { stroke-dasharray: 5 4; }
+.hero-code { --role: var(--hero-code); }
+.hero-llm { --role: var(--hero-llm); }
+.hero-human { --role: var(--hero-human); }
+.hero-data { --role: var(--hero-data); }
+.hero-edge { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.hero-dashed { stroke-dasharray: 6 4; }
+.hero-bold { stroke: var(--ink); stroke-width: 2.6; }
+.hero-tip { fill: var(--muted); }
+.hero-elabel rect { fill: var(--surface); stroke: var(--line); }
+.hero-svg .hero-elabel text { font-size: 13px; fill: var(--ink-2); }
+/* 番号は担い手の色と紛れないよう、枠を文字色にする（下の要点の番号と同じ） */
+.hero-badge { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
+.hero-svg .hero-badge-n { font-size: 12px; font-weight: 800; }
+.hero-pat { fill: var(--cat); }
+.hero-ring { fill: none; stroke: var(--cat); stroke-width: 3; }
+.hero-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-size: 0.85rem; color: var(--ink-2); }
+.hero-legend li { display: flex; align-items: center; gap: 6px; }
+.hero-swatch { flex: none; }
+.hero-notes { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; counter-reset: hero; }
+.hero-notes li { display: flex; align-items: flex-start; gap: 10px; counter-increment: hero; font-size: 0.95rem; line-height: 1.6; }
+.hero-notes li::before {
+  content: counter(hero); flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px;
+  border: 1.6px solid var(--ink); border-radius: 50%; font-size: 0.75rem; font-weight: 800; line-height: 1; box-sizing: border-box;
+}
+.hero-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 0; font-weight: 700; }
+.hero-meta span + span { font-weight: 400; color: var(--muted); }
+/* 横長の図は狭い画面で文字が縮むので、縦向き（レーンを積む）に切り替える。
+   横幅の大きい図（.hero-wide）は 960px まで縦向きのまま（hero.mjs の WIDE_LR） */
+@media (min-width: 860px) { .hero-tb { display: none; } }
+@media (max-width: 859.98px) { .hero-lr { display: none; } }
+@media (min-width: 860px) and (max-width: 959.98px) {
+  .hero-wide .hero-lr { display: none; }
+  .hero-wide .hero-tb { display: block; }
+}
+.entry-thumb {
+  align-self: start; box-sizing: border-box; width: 120px; height: 68px; margin-top: 4px; padding: 4px;
+  border-radius: 8px; background: var(--sunken);
+}
+.entry-thumb .hero-svg { width: 100%; height: 100%; max-width: none; }
+.entry-thumb .hero-band { fill: var(--surface); }
+/* 縮小版は 0.15 倍ほどに縮むので、線の太さを画面上の太さで固定し、面も濃くして形が残るようにする */
+.entry-thumb .hero-edge, .entry-thumb .hero-shape, .entry-thumb .hero-band { vector-effect: non-scaling-stroke; stroke-width: 1px; }
+@supports (color: color-mix(in srgb, red, blue)) {
+  .entry-thumb .hero-node .hero-shape { fill: color-mix(in srgb, var(--role, var(--muted)) 35%, var(--surface)); }
+}
+.related .entry-thumb { display: none; }
+
 /* シリーズ */
 .series { padding: 14px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font-size: 0.9rem; }
 .series-h { margin: 0 0 6px; font-weight: 700; }
@@ -514,6 +591,8 @@ kbd {
   .brand span { font-size: 0.95rem; }
   .home-hero { padding-top: 40px; }
   .entry { grid-template-columns: 1fr; gap: 2px; }
+  .entry-thumb { display: none; }
+  .hero { padding: 12px; }
   .spec { grid-template-columns: 1fr; }
   .spec > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .spec > div:last-child { border-bottom: 0; }

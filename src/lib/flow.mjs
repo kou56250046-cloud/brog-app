@@ -25,19 +25,19 @@ const MARGIN = 16;
 let figureSeq = 0;
 
 /** 文字幅の概算（全角 = 1em、半角 ≒ 0.58em） */
-function textWidth(s) {
+export function textWidth(s, font = FONT) {
   let w = 0;
-  for (const ch of s) w += /[\u0000-ÿ]/.test(ch) ? FONT * 0.58 : FONT;
+  for (const ch of s) w += /[\u0000-ÿ]/.test(ch) ? font * 0.58 : font;
   return w;
 }
 
 /** 指定幅で折り返す（明示改行 \n を優先） */
-function wrap(label) {
+export function wrap(label, max = MAX_TEXT, font = FONT) {
   const lines = [];
   for (const part of label.split(/\\n|<br\s*\/?>/)) {
     let cur = "";
     for (const ch of part) {
-      if (textWidth(cur + ch) > MAX_TEXT && cur) {
+      if (textWidth(cur + ch, font) > max && cur) {
         lines.push(cur);
         cur = "";
       }
@@ -55,11 +55,23 @@ const SHAPES = [
   ["diamond", /^\{(.*?)\}/],
 ];
 
-const EDGE_RE = /^\s*(?:(-->|==>)(?:\|([^|]+)\|)?|--\s*(.+?)\s*-->|(-\.->)(?:\|([^|]+)\|)?|-\.\s*(.+?)\s*\.->)/;
+const EDGE_RE = /^\s*(?:(-->|==>)(?:\|([^|]+)\|)?|--\s*(.+?)\s*-->|(-\.->)(?:\|([^|]+)\|)?|-\.\s*(.+?)\s*\.->|(<-->)(?:\|([^|]+)\|)?)/;
 
-function parse(src) {
+/** ```hero だけで使える行（見出し画像の設計図。src/lib/hero.mjs） */
+const HERO_LINE = /^(group|end|title|note)(?:\s+(.*))?$/;
+
+/**
+ * flow DSL を解析する。hero のときは group / end / title / note / <--> / 複数クラスも読む
+ * @param {string} src
+ * @param {{ hero?: boolean }} [opts]
+ */
+export function parse(src, { hero = false } = {}) {
   const nodes = new Map();
   const edges = [];
+  const groups = [];
+  const notes = [];
+  let title = "";
+  let group = null;
   let dir = "TB";
 
   const node = (rest) => {
@@ -70,6 +82,10 @@ function parse(src) {
     let n = nodes.get(id);
     if (!n) {
       n = { id, label: id, shape: "rect", cls: "", order: nodes.size };
+      if (hero) {
+        n.classes = [];
+        n.group = group?.id ?? "";
+      }
       nodes.set(id, n);
     }
     for (const [shape, re] of SHAPES) {
@@ -81,10 +97,15 @@ function parse(src) {
         break;
       }
     }
-    const c = r.match(/^:::(\w+)/);
-    if (c) {
-      n.cls = c[1];
+    let c;
+    // flow は 1 つだけ（後から付けたものが勝つ）。hero は担い手と強調を並べられる
+    while ((c = r.match(/^:::(\w+)/))) {
       r = r.slice(c[0].length);
+      if (!hero) {
+        n.cls = c[1];
+        break;
+      }
+      if (!n.classes.includes(c[1])) n.classes.push(c[1]);
     }
     return { id, rest: r };
   };
@@ -97,23 +118,51 @@ function parse(src) {
       dir = d[1].toUpperCase() === "LR" ? "LR" : "TB";
       continue;
     }
+    const h = line.match(HERO_LINE);
+    // flow では end / note などを ID にしたノード（`end --> X`、単独の `end`）は今までどおりノードとして読む
+    const asNode = !hero && h && (h[2] === undefined || EDGE_RE.test(h[2]));
+    if (h && !asNode) {
+      if (!hero) throw new Error(`flow: "${h[1]}" は \`\`\`hero の中でだけ使えます: "${line}"`);
+      const arg = (h[2] ?? "").trim();
+      if (h[1] === "title") title = arg;
+      else if (h[1] === "end") {
+        if (!group) throw new Error("group の無い end があります");
+        group = null;
+      } else if (h[1] === "group") {
+        if (group) throw new Error(`group "${group.id}" の中に group は入れられません`);
+        const g = arg.match(/^([A-Za-z_][\w-]*)\s*(.*)$/);
+        if (!g) throw new Error(`group の ID が読めません: "${line}"`);
+        group = { id: g[1], label: g[2].trim() };
+        groups.push(group);
+      } else {
+        const m = arg.match(/^([A-Za-z_][\w-]*)\s+(.+)$/);
+        if (!m) throw new Error(`note は「note ノードID 文」と書きます: "${line}"`);
+        notes.push({ node: m[1], text: m[2].trim() });
+      }
+      continue;
+    }
     let { id: from, rest } = node(line);
     while (rest.trim()) {
       const e = rest.match(EDGE_RE);
       if (!e) throw new Error(`flow: 矢印が読めません: "${rest.trim()}"`);
+      if (e[7] && !hero) throw new Error(`flow: <--> は \`\`\`hero の中でだけ使えます: "${line}"`);
       const dashed = Boolean(e[4] || e[6]);
-      const label = (e[2] || e[3] || e[5] || e[6] || "").trim();
+      const label = (e[2] || e[3] || e[5] || e[6] || e[8] || "").trim();
       const next = node(rest.slice(e[0].length));
-      edges.push({ from, to: next.id, label, dashed, bold: e[1] === "==>" });
+      const edge = { from, to: next.id, label, dashed, bold: e[1] === "==>" };
+      if (e[7]) edge.both = true;
+      edges.push(edge);
       from = next.id;
       rest = next.rest;
     }
   }
-  return { nodes: [...nodes.values()], edges, dir };
+  if (group) throw new Error(`group "${group.id}" の end がありません`);
+  const graph = { nodes: [...nodes.values()], edges, dir };
+  return hero ? { ...graph, groups, notes, title } : graph;
 }
 
 /** DFS で戻り辺（ループ）を判定する */
-function markBackEdges(nodes, edges) {
+export function markBackEdges(nodes, edges) {
   const out = new Map(nodes.map((n) => [n.id, []]));
   edges.forEach((e) => out.get(e.from).push(e));
   const state = new Map();
@@ -136,7 +185,7 @@ function layout({ nodes, edges, dir }) {
   // 大きさ
   for (const n of nodes) {
     n.lines = wrap(n.label);
-    const tw = Math.max(...n.lines.map(textWidth));
+    const tw = Math.max(...n.lines.map((l) => textWidth(l)));
     const th = n.lines.length * LINE;
     n.w = Math.round(tw + PAD_X * 2);
     n.h = Math.round(th + PAD_Y * 2);

@@ -9,13 +9,17 @@ export function slugify(name) {
   if (/^[a-z0-9][a-z0-9 ._+#-]*$/.test(s)) {
     return s.replace(/\+/g, "-plus").replace(/#/g, "-sharp").replace(/[ ._]+/g, "-").replace(/-+/g, "-");
   }
-  // FNV-1a 32bit
+  return `t-${fnv1a(s).toString(36)}`;
+}
+
+/** FNV-1a 32bit。名前から短い固定値を作る（ファイル名・見出し画像の模様の種） */
+export function fnv1a(s) {
   let h = 0x811c9dc5;
-  for (const ch of s) {
+  for (const ch of String(s)) {
     h ^= ch.codePointAt(0);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return `t-${h.toString(36)}`;
+  return h;
 }
 
 /**

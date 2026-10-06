@@ -1,6 +1,7 @@
 // 各ページの本文テンプレート
 import { escapeHtml, formatDate, map, rel, when } from "../lib/util.mjs";
 import { LEVELS } from "../lib/content.mjs";
+import { heroFigure, heroThumb } from "../lib/hero.mjs";
 
 const LEVEL_KEYS = Object.keys(LEVELS);
 
@@ -42,6 +43,7 @@ function entry(a, depth, data) {
       <span>${a.minutes}分</span>
     </div>
   </div>
+  <div class="entry-thumb" aria-hidden="true"${cat.color ? ` style="--cat:${cat.color}"` : ""}>${heroThumb(a)}</div>
 </article>`;
 }
 
@@ -150,6 +152,7 @@ export function articlePage({ article: a, html, headings, related, prev, next, s
       <div><dt>読了</dt><dd>約${a.minutes}分${a.codeLines ? `（コード${a.codeLines}行）` : ""}</dd></div>
       <div><dt>タグ</dt><dd class="tags">${map(a.tags, (t) => `<a href="${r(data.tagByName.get(t).url)}">${escapeHtml(t)}</a>`)}</dd></div>
     </dl>
+    ${heroFigure(a, cat.color)}
   </header>
 
   <div class="post-layout wrap">

@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { stripMarkdown } from "./markdown.mjs";
 import { slugify } from "./util.mjs";
+import { extractHero, parseHero } from "./hero.mjs";
 
 const ROOT = process.cwd();
 const ARTICLES_DIR = path.join(ROOT, "content", "articles");
@@ -59,8 +60,12 @@ function loadArticles(warn) {
     .filter((f) => f.endsWith(".md"))
     .map((f) => {
       const slug = f.replace(/\.md$/, "");
-      const { data, content } = parseFrontmatter(fs.readFileSync(path.join(ARTICLES_DIR, f), "utf8"));
-      if (String(data.status ?? "draft") !== "draft") lint(slug, data, warn);
+      const { data, content: raw } = parseFrontmatter(fs.readFileSync(path.join(ARTICLES_DIR, f), "utf8"));
+      const published = String(data.status ?? "draft") !== "draft";
+      if (published) lint(slug, data, warn);
+      // ```hero は見出し画像にするので本文から外す（本文・検索・読了時間に入れない）。下書きでは警告しない
+      const { src, count, body: content } = extractHero(raw);
+      const hero = parseHero(src, count, (msg) => { if (published) warn.push(`${slug}.md: hero ${msg}`); });
       const levels = toArray(data.level).filter((l) => LEVELS[l]);
       return {
         slug,
@@ -76,6 +81,8 @@ function loadArticles(warn) {
         tags: toArray(data.tags),
         levels: levels.length ? levels : ["basic"],
         series: data.series ? String(data.series) : "",
+        /** 見出し画像の設計図（src/lib/hero.mjs）。無い・不正なら null（slug の模様で代える） */
+        hero,
         status: String(data.status ?? "draft"),
         content,
         ...measure(content),
